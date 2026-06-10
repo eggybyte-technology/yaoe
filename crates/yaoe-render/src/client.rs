@@ -275,7 +275,7 @@ pub fn render_client_config(
                     tag: "cn-dns",
                     server: CN_DNS_SERVER,
                     server_port: CN_DNS_PORT,
-                    detour: "direct",
+                    detour: None,
                     tls: DnsTls {
                         server_name: CN_DNS_TLS_SERVER_NAME,
                     },
@@ -285,7 +285,7 @@ pub fn render_client_config(
                     tag: "remote-dns",
                     server: REMOTE_DNS_SERVER,
                     server_port: REMOTE_DNS_PORT,
-                    detour: "proxy",
+                    detour: Some("proxy"),
                     tls: DnsTls {
                         server_name: REMOTE_DNS_TLS_SERVER_NAME,
                     },
@@ -406,7 +406,8 @@ struct DnsServer {
     tag: &'static str,
     server: &'static str,
     server_port: u16,
-    detour: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detour: Option<&'static str>,
     tls: DnsTls,
 }
 
@@ -716,7 +717,7 @@ fn validate_shared_client_shape(config: &Value) -> YaoeResult<()> {
     if cn_dns.get("type").and_then(Value::as_str) != Some("tls")
         || cn_dns.get("server").and_then(Value::as_str) != Some(CN_DNS_SERVER)
         || cn_dns.get("server_port").and_then(Value::as_u64) != Some(CN_DNS_PORT.into())
-        || cn_dns.get("detour").and_then(Value::as_str) != Some("direct")
+        || cn_dns.get("detour").is_some()
         || cn_dns
             .get("tls")
             .and_then(|tls| tls.get("server_name"))

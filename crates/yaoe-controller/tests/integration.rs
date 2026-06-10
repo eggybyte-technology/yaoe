@@ -102,7 +102,7 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     assert_eq!(json["dns"]["servers"][0]["tag"], "cn-dns");
     assert_eq!(json["dns"]["servers"][0]["server"], "223.5.5.5");
     assert_eq!(json["dns"]["servers"][0]["server_port"], 853);
-    assert_eq!(json["dns"]["servers"][0]["detour"], "direct");
+    assert!(json["dns"]["servers"][0].get("detour").is_none());
     assert_eq!(
         json["dns"]["servers"][0]["tls"]["server_name"],
         "dns.alidns.com"
@@ -398,6 +398,60 @@ fn scripts_construct_config_url_from_env_key() {
         assert!(!rendered.contains("linux-amd64.sh"));
         assert!(!rendered.contains("macos-amd64.sh"));
     }
+}
+
+#[test]
+fn service_scripts_probe_runtime_startup_and_log_launchd_output() {
+    let config = yaoe_config::parse_and_validate(&sample_config()).unwrap();
+    let linux_install = render_install_script(&config, "linux").unwrap();
+    let linux_update = render_update_script(&config, "linux").unwrap();
+    let macos_install = render_install_script(&config, "macos").unwrap();
+    let macos_update = render_update_script(&config, "macos").unwrap();
+
+    for rendered in [&linux_install, &linux_update, &macos_install, &macos_update] {
+        assert!(rendered.contains("log() { printf 'yaoe: %s\\n' \"$*\" >&2; }"));
+        assert!(rendered.contains("validated root privileges and config key shape"));
+        assert!(rendered.contains("checking sing-box version"));
+        assert!(rendered.contains("pending sing-box config OK"));
+        assert!(rendered.contains("waiting for immediate sing-box runtime failures"));
+        assert!(rendered.contains("smoke_probe()"));
+        assert!(rendered.contains("https://www.google.com/generate_204|204"));
+        assert!(rendered.contains("https://www.gstatic.com/generate_204"));
+        assert!(rendered.contains("https://github.com|200"));
+        assert!(rendered.contains("https://api.github.com/rate_limit|200"));
+        assert!(rendered.contains("-w '%{http_code}'"));
+        assert!(rendered.contains("service smoke probe OK: url=$url http=$status"));
+        assert!(rendered.contains("curl_exit=$curl_exit"));
+        assert!(
+            rendered.contains("WARNING: service smoke probe did not reach public test endpoints")
+        );
+        assert!(rendered.contains(
+            "if smoke_probe; then smoke_result=\"ok\"; else smoke_result=\"warning\"; fi"
+        ));
+        assert!(!rendered.contains("fail \"service smoke probe failed"));
+        assert!(!rendered.contains("downloading $1 from $2"));
+    }
+
+    assert!(
+        linux_install
+            .contains("service_state=\"$(systemctl is-active yaoe-sing-box.service || true)\"")
+    );
+    assert!(linux_install.contains("starting YAOE sing-box linux install"));
+    assert!(linux_update.contains("starting YAOE sing-box linux update"));
+    assert!(linux_install.contains("systemd state: yaoe-sing-box.service=$service_state"));
+    assert!(linux_install.contains(
+        "YAOE sing-box linux install completed: service=active smoke_probe=$smoke_result"
+    ));
+    assert!(macos_install.contains("starting YAOE sing-box macos install"));
+    assert!(macos_update.contains("starting YAOE sing-box macos update"));
+    assert!(macos_install.contains("<key>StandardOutPath</key>"));
+    assert!(macos_install.contains("<string>/Library/Logs/YAOE/sing-box.out.log</string>"));
+    assert!(macos_install.contains("<key>StandardErrorPath</key>"));
+    assert!(macos_install.contains("<string>/Library/Logs/YAOE/sing-box.err.log</string>"));
+    assert!(macos_install.contains("launchd state: io.yaoe.sing-box=${launchd_state:-unknown}"));
+    assert!(macos_install.contains(
+        "YAOE sing-box macos install completed: service=running smoke_probe=$smoke_result"
+    ));
 }
 
 #[test]

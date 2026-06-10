@@ -1579,28 +1579,33 @@ Linux local artifact paths:
 
 The Linux install script performs this exact sequence:
 
-1. Requires `uname -s` to be `Linux`.
-2. Maps `uname -m` of `x86_64` or `amd64` to `arch=amd64`.
-3. Maps `uname -m` of `aarch64` or `arm64` to `arch=arm64`.
-4. Rejects every other `uname -m` value.
-5. Derives `variant=linux-$arch`.
-6. Requires effective uid `0`.
-7. Requires `YAOE_CONFIG_KEY` to match section 8.1.
-8. Creates `/usr/local/libexec/yaoe` with mode `0755`.
-9. Creates `/etc/yaoe-sing-box` with mode `0755`.
-10. Downloads `sing-box-1.13.13-linux-$arch.tar.gz` from the Gitee Release asset URL embedded in the rendered script.
-11. Extracts the sing-box executable to a temporary directory.
-12. Installs the executable to `/usr/local/libexec/yaoe/sing-box` with mode `0755`.
-13. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13`.
-14. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json`.
-15. Downloads the config to `/etc/yaoe-sing-box/config.json.pending`.
-16. Runs `/usr/local/libexec/yaoe/sing-box check -c /etc/yaoe-sing-box/config.json.pending`.
-17. Renders `/etc/systemd/system/yaoe-sing-box.service`.
-18. Atomically replaces `/etc/yaoe-sing-box/config.json` with the pending config.
-19. Runs `systemctl daemon-reload`.
-20. Runs `systemctl enable --now yaoe-sing-box.service`.
-21. Runs `systemctl restart yaoe-sing-box.service`.
-22. Requires `systemctl is-active yaoe-sing-box.service` output `active`.
+1. Emits `yaoe: starting YAOE sing-box linux install`.
+2. Requires `uname -s` to be `Linux`.
+3. Maps `uname -m` of `x86_64` or `amd64` to `arch=amd64`.
+4. Maps `uname -m` of `aarch64` or `arm64` to `arch=arm64`.
+5. Rejects every other `uname -m` value.
+6. Derives `variant=linux-$arch` and logs the detected architecture and variant.
+7. Requires effective uid `0`.
+8. Requires `YAOE_CONFIG_KEY` to match section 8.1, then logs that only the key shape was validated.
+9. Creates `/usr/local/libexec/yaoe` with mode `0755`.
+10. Creates `/etc/yaoe-sing-box` with mode `0755`.
+11. Downloads `sing-box-1.13.13-linux-$arch.tar.gz` from the Gitee Release asset URL embedded in the rendered script and logs start/completion.
+12. Extracts the sing-box executable to a temporary directory.
+13. Installs the executable to `/usr/local/libexec/yaoe/sing-box` with mode `0755`.
+14. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13` and logs success.
+15. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json` without logging the full URL.
+16. Downloads the config to `/etc/yaoe-sing-box/config.json.pending` and logs start/completion without exposing `YAOE_CONFIG_KEY`.
+17. Runs `/usr/local/libexec/yaoe/sing-box check -c /etc/yaoe-sing-box/config.json.pending` and logs success.
+18. Renders `/etc/systemd/system/yaoe-sing-box.service`.
+19. Atomically replaces `/etc/yaoe-sing-box/config.json` with the pending config.
+20. Runs `systemctl daemon-reload`.
+21. Runs `systemctl enable --now yaoe-sing-box.service`.
+22. Runs `systemctl restart yaoe-sing-box.service`.
+23. Waits 2 seconds for immediate sing-box runtime fatal errors to surface.
+24. Logs `systemctl is-active yaoe-sing-box.service` output and requires `active`.
+25. Runs diagnostic IPv4 HTTPS smoke probes with `curl` against `https://www.google.com/generate_204`, `https://www.gstatic.com/generate_204`, `https://github.com`, and `https://api.github.com/rate_limit`, logging each attempt with URL, curl exit code, HTTP status, and expected status.
+26. Treats public smoke probe success as `smoke_probe=ok`; when all public probes fail but the service is active, emits a warning and continues with `smoke_probe=warning`.
+27. Emits final success log `yaoe: YAOE sing-box linux install completed: service=active smoke_probe=<ok|warning>`.
 
 Linux systemd unit:
 
@@ -1628,21 +1633,27 @@ WantedBy=multi-user.target
 
 The Linux update script performs this exact sequence:
 
-1. Requires `uname -s` to be `Linux`.
-2. Maps CPU architecture exactly as section 8.4.
-3. Derives `variant=linux-$arch`.
-4. Requires effective uid `0`.
-5. Requires `YAOE_CONFIG_KEY` to match section 8.1.
-6. Requires `/usr/local/libexec/yaoe/sing-box` to exist and be executable.
-7. Requires `/etc/systemd/system/yaoe-sing-box.service` to exist.
-8. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13`.
+1. Emits `yaoe: starting YAOE sing-box linux update`.
+2. Requires `uname -s` to be `Linux`.
+3. Maps CPU architecture exactly as section 8.4.
+4. Derives `variant=linux-$arch` and logs the detected architecture and variant.
+5. Requires effective uid `0`.
+6. Requires `YAOE_CONFIG_KEY` to match section 8.1, then logs that only the key shape was validated.
+7. Requires `/usr/local/libexec/yaoe/sing-box` to exist and be executable.
+8. Requires `/etc/systemd/system/yaoe-sing-box.service` to exist.
 9. Creates `/etc/yaoe-sing-box` with mode `0755` when the directory is absent.
-10. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json`.
-11. Downloads the config to `/etc/yaoe-sing-box/config.json.pending`.
-12. Runs `/usr/local/libexec/yaoe/sing-box check -c /etc/yaoe-sing-box/config.json.pending`.
-13. Atomically replaces `/etc/yaoe-sing-box/config.json` with the pending config.
-14. Runs `systemctl restart yaoe-sing-box.service`.
-15. Requires `systemctl is-active yaoe-sing-box.service` output `active`.
+10. Logs that existing install artifacts are present.
+11. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13` and logs success.
+12. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json` without logging the full URL.
+13. Downloads the config to `/etc/yaoe-sing-box/config.json.pending` and logs start/completion without exposing `YAOE_CONFIG_KEY`.
+14. Runs `/usr/local/libexec/yaoe/sing-box check -c /etc/yaoe-sing-box/config.json.pending` and logs success.
+15. Atomically replaces `/etc/yaoe-sing-box/config.json` with the pending config.
+16. Runs `systemctl restart yaoe-sing-box.service`.
+17. Waits 2 seconds for immediate sing-box runtime fatal errors to surface.
+18. Logs `systemctl is-active yaoe-sing-box.service` output and requires `active`.
+19. Runs diagnostic IPv4 HTTPS smoke probes with `curl` against `https://www.google.com/generate_204`, `https://www.gstatic.com/generate_204`, `https://github.com`, and `https://api.github.com/rate_limit`, logging each attempt with URL, curl exit code, HTTP status, and expected status.
+20. Treats public smoke probe success as `smoke_probe=ok`; when all public probes fail but the service is active, emits a warning and continues with `smoke_probe=warning`.
+21. Emits final success log `yaoe: YAOE sing-box linux update completed: service=active smoke_probe=<ok|warning>`.
 
 ### 8.6 macOS Install Script
 
@@ -1656,28 +1667,34 @@ macOS local artifact paths:
 
 The macOS install script performs this exact sequence:
 
-1. Requires `uname -s` to be `Darwin`.
-2. Maps `uname -m` of `x86_64` to `arch=amd64`.
-3. Maps `uname -m` of `arm64` to `arch=arm64`.
-4. Rejects every other `uname -m` value.
-5. Derives `variant=macos-$arch`.
-6. Requires effective uid `0`.
-7. Requires `YAOE_CONFIG_KEY` to match section 8.1.
-8. Creates `/usr/local/libexec/yaoe` with mode `0755`.
-9. Creates `/Library/Application Support/YAOE/sing-box` with mode `0755`.
-10. Downloads `sing-box-1.13.13-macos-$arch.tar.gz` from the Gitee Release asset URL embedded in the rendered script.
-11. Extracts the sing-box executable to a temporary directory.
-12. Installs the executable to `/usr/local/libexec/yaoe/sing-box` with mode `0755`.
-13. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13`.
-14. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json`.
-15. Downloads the config to `/Library/Application Support/YAOE/sing-box/config.json.pending`.
-16. Runs `/usr/local/libexec/yaoe/sing-box check -c '/Library/Application Support/YAOE/sing-box/config.json.pending'`.
-17. Renders `/Library/LaunchDaemons/io.yaoe.sing-box.plist` with owner `root:wheel` and mode `0644`.
-18. Atomically replaces `/Library/Application Support/YAOE/sing-box/config.json` with the pending config.
-19. Runs `launchctl bootout system /Library/LaunchDaemons/io.yaoe.sing-box.plist` when the service is loaded.
-20. Runs `launchctl bootstrap system /Library/LaunchDaemons/io.yaoe.sing-box.plist`.
-21. Runs `launchctl enable system/io.yaoe.sing-box`.
-22. Requires `launchctl print system/io.yaoe.sing-box` to succeed.
+1. Emits `yaoe: starting YAOE sing-box macos install`.
+2. Requires `uname -s` to be `Darwin`.
+3. Maps `uname -m` of `x86_64` to `arch=amd64`.
+4. Maps `uname -m` of `arm64` to `arch=arm64`.
+5. Rejects every other `uname -m` value.
+6. Derives `variant=macos-$arch` and logs the detected architecture and variant.
+7. Requires effective uid `0`.
+8. Requires `YAOE_CONFIG_KEY` to match section 8.1, then logs that only the key shape was validated.
+9. Creates `/usr/local/libexec/yaoe` with mode `0755`.
+10. Creates `/Library/Application Support/YAOE/sing-box` with mode `0755`.
+11. Creates `/Library/Logs/YAOE` with mode `0755`.
+12. Downloads `sing-box-1.13.13-macos-$arch.tar.gz` from the Gitee Release asset URL embedded in the rendered script and logs start/completion.
+13. Extracts the sing-box executable to a temporary directory.
+14. Installs the executable to `/usr/local/libexec/yaoe/sing-box` with mode `0755`.
+15. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13` and logs success.
+16. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json` without logging the full URL.
+17. Downloads the config to `/Library/Application Support/YAOE/sing-box/config.json.pending` and logs start/completion without exposing `YAOE_CONFIG_KEY`.
+18. Runs `/usr/local/libexec/yaoe/sing-box check -c '/Library/Application Support/YAOE/sing-box/config.json.pending'` and logs success.
+19. Renders `/Library/LaunchDaemons/io.yaoe.sing-box.plist` with owner `root:wheel` and mode `0644`.
+20. Atomically replaces `/Library/Application Support/YAOE/sing-box/config.json` with the pending config.
+21. Runs `launchctl bootout system /Library/LaunchDaemons/io.yaoe.sing-box.plist` when the service is loaded.
+22. Runs `launchctl bootstrap system /Library/LaunchDaemons/io.yaoe.sing-box.plist`.
+23. Runs `launchctl enable system/io.yaoe.sing-box`.
+24. Waits 2 seconds for immediate sing-box runtime fatal errors to surface.
+25. Logs `launchctl print system/io.yaoe.sing-box` state and requires `running`.
+26. Runs diagnostic IPv4 HTTPS smoke probes with `curl` against `https://www.google.com/generate_204`, `https://www.gstatic.com/generate_204`, `https://github.com`, and `https://api.github.com/rate_limit`, logging each attempt with URL, curl exit code, HTTP status, and expected status.
+27. Treats public smoke probe success as `smoke_probe=ok`; when all public probes fail but the service is running, emits a warning and continues with `smoke_probe=warning`.
+28. Emits final success log `yaoe: YAOE sing-box macos install completed: service=running smoke_probe=<ok|warning>`.
 
 Launchd plist:
 
@@ -1701,6 +1718,10 @@ Launchd plist:
   <true/>
   <key>WorkingDirectory</key>
   <string>/usr/local/libexec/yaoe</string>
+  <key>StandardOutPath</key>
+  <string>/Library/Logs/YAOE/sing-box.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Library/Logs/YAOE/sing-box.err.log</string>
 </dict>
 </plist>
 ```
@@ -1709,21 +1730,27 @@ Launchd plist:
 
 The macOS update script performs this exact sequence:
 
-1. Requires `uname -s` to be `Darwin`.
-2. Detects CPU architecture exactly as section 8.6.
-3. Derives `variant=macos-$arch`.
-4. Requires effective uid `0`.
-5. Requires `YAOE_CONFIG_KEY` to match section 8.1.
-6. Requires `/usr/local/libexec/yaoe/sing-box` to exist and be executable.
-7. Requires `/Library/LaunchDaemons/io.yaoe.sing-box.plist` to exist.
-8. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13`.
+1. Emits `yaoe: starting YAOE sing-box macos update`.
+2. Requires `uname -s` to be `Darwin`.
+3. Detects CPU architecture exactly as section 8.6.
+4. Derives `variant=macos-$arch` and logs the detected architecture and variant.
+5. Requires effective uid `0`.
+6. Requires `YAOE_CONFIG_KEY` to match section 8.1, then logs that only the key shape was validated.
+7. Requires `/usr/local/libexec/yaoe/sing-box` to exist and be executable.
+8. Requires `/Library/LaunchDaemons/io.yaoe.sing-box.plist` to exist.
 9. Creates `/Library/Application Support/YAOE/sing-box` with mode `0755` when the directory is absent.
-10. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json`.
-11. Downloads the config to `/Library/Application Support/YAOE/sing-box/config.json.pending`.
-12. Runs `/usr/local/libexec/yaoe/sing-box check -c '/Library/Application Support/YAOE/sing-box/config.json.pending'`.
-13. Atomically replaces `/Library/Application Support/YAOE/sing-box/config.json` with the pending config.
-14. Runs `launchctl kickstart -k system/io.yaoe.sing-box`.
-15. Requires `launchctl print system/io.yaoe.sing-box` to succeed.
+10. Logs that existing install artifacts are present.
+11. Requires `/usr/local/libexec/yaoe/sing-box version` to report `1.13.13` and logs success.
+12. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json` without logging the full URL.
+13. Downloads the config to `/Library/Application Support/YAOE/sing-box/config.json.pending` and logs start/completion without exposing `YAOE_CONFIG_KEY`.
+14. Runs `/usr/local/libexec/yaoe/sing-box check -c '/Library/Application Support/YAOE/sing-box/config.json.pending'` and logs success.
+15. Atomically replaces `/Library/Application Support/YAOE/sing-box/config.json` with the pending config.
+16. Runs `launchctl kickstart -k system/io.yaoe.sing-box`.
+17. Waits 2 seconds for immediate sing-box runtime fatal errors to surface.
+18. Logs `launchctl print system/io.yaoe.sing-box` state and requires `running`.
+19. Runs diagnostic IPv4 HTTPS smoke probes with `curl` against `https://www.google.com/generate_204`, `https://www.gstatic.com/generate_204`, `https://github.com`, and `https://api.github.com/rate_limit`, logging each attempt with URL, curl exit code, HTTP status, and expected status.
+20. Treats public smoke probe success as `smoke_probe=ok`; when all public probes fail but the service is running, emits a warning and continues with `smoke_probe=warning`.
+21. Emits final success log `yaoe: YAOE sing-box macos update completed: service=running smoke_probe=<ok|warning>`.
 
 ## 9. Generated Client Configs
 
@@ -1888,7 +1915,7 @@ Every generated sing-box service or mobile config contains:
 4. TUN `mtu = 1500`.
 5. TUN `auto_route = true`.
 6. `route.default_domain_resolver = "remote-dns"`.
-7. DNS server `cn-dns` is AliDNS DoT over `direct`: `type = "tls"`, `server = "223.5.5.5"`, `server_port = 853`, `detour = "direct"`, and `tls.server_name = "dns.alidns.com"`.
+7. DNS server `cn-dns` is AliDNS DoT without an explicit DNS detour: `type = "tls"`, `server = "223.5.5.5"`, `server_port = 853`, and `tls.server_name = "dns.alidns.com"`. The renderer intentionally omits `detour = "direct"` because sing-box `1.13.13` fatals at runtime when a DNS TLS server detours to an empty direct outbound.
 8. DNS server `remote-dns` is Cloudflare DoT over `proxy`: `type = "tls"`, `server = "1.1.1.1"`, `server_port = 853`, `detour = "proxy"`, and `tls.server_name = "cloudflare-dns.com"`.
 9. DNS uses global `strategy = "ipv4_only"`.
 10. DNS `reverse_mapping = true`.
@@ -1990,7 +2017,6 @@ Every Linux/macOS service config is equivalent to this shape after substitution 
         "tag": "cn-dns",
         "server": "223.5.5.5",
         "server_port": 853,
-        "detour": "direct",
         "tls": { "server_name": "dns.alidns.com" }
       },
       {
