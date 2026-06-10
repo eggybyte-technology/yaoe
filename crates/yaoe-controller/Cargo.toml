@@ -1,0 +1,36 @@
+[package]
+name = "yaoe-controller"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+libc.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+toml.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+yaoe-cloudflare.workspace = true
+yaoe-config.workspace = true
+yaoe-gitee.workspace = true
+yaoe-server-installer.workspace = true
+yaoe-package.workspace = true
+yaoe-render.workspace = true
+yaoe-rules.workspace = true
+yaoe-ssh.workspace = true
+yaoe-upstream.workspace = true
+yaoe-home.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tempfile.workspace = true
+serde_json.workspace = true
+wait-timeout.workspace = true
+yaoe-cloudflare.workspace = true
+yaoe-gitee.workspace = true
+yaoe-ssh.workspace = true

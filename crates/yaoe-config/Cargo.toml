@@ -1,0 +1,23 @@
+[package]
+name = "yaoe-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+hex.workspace = true
+ipnet.workspace = true
+rand.workspace = true
+regex.workspace = true
+serde.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+url.workspace = true
+uuid.workspace = true
+x25519-dalek.workspace = true
+yaoe-home.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

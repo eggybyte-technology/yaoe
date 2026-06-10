@@ -1,0 +1,9 @@
+[profile.default]
+fail-fast = true
+retries = 0
+slow-timeout = "30s"
+
+[profile.acceptance]
+inherits = "default"
+test-threads = 1
+slow-timeout = { period = "120s", terminate-after = 5, grace-period = "5s" }

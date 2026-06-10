@@ -1,0 +1,62 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/yaoe-config",
+    "crates/yaoe-home",
+    "crates/yaoe-cloudflare",
+    "crates/yaoe-gitee",
+    "crates/yaoe-upstream",
+    "crates/yaoe-render",
+    "crates/yaoe-package",
+    "crates/yaoe-ssh",
+    "crates/yaoe-rules",
+    "crates/yaoe-controller",
+    "crates/yaoe-server-installer",
+    "crates/yaoe-cli",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.96.0"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+clap = { version = "4", features = ["derive"] }
+curve25519-dalek = "4"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+hex = "0.4"
+hickory-resolver = { version = "0.24", default-features = false, features = ["system-config", "tokio-runtime"] }
+ipnet = "2"
+libc = "0.2"
+rand = "0.8"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tar = "0.4"
+tempfile = "3"
+thiserror = "2"
+toml = "0.8"
+toml_edit = "0.22"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+walkdir = "2"
+wait-timeout = "0.2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+
+yaoe-config = { path = "crates/yaoe-config" }
+yaoe-home = { path = "crates/yaoe-home" }
+yaoe-cloudflare = { path = "crates/yaoe-cloudflare" }
+yaoe-gitee = { path = "crates/yaoe-gitee" }
+yaoe-upstream = { path = "crates/yaoe-upstream" }
+yaoe-render = { path = "crates/yaoe-render" }
+yaoe-package = { path = "crates/yaoe-package" }
+yaoe-ssh = { path = "crates/yaoe-ssh" }
+yaoe-rules = { path = "crates/yaoe-rules" }
+yaoe-controller = { path = "crates/yaoe-controller" }
+yaoe-server-installer = { path = "crates/yaoe-server-installer" }
