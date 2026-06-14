@@ -1,0 +1,16 @@
+[package]
+name = "yaoe-rules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yaoe-home.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

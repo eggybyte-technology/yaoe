@@ -1,0 +1,23 @@
+[package]
+name = "yaoe-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "yaoe"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+regex.workspace = true
+toml.workspace = true
+yaoe-config.workspace = true
+yaoe-controller.workspace = true
+yaoe-home.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile.workspace = true

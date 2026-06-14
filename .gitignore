@@ -1,0 +1,10 @@
+/target/
+.direnv/
+.yaoe/
+.wrangler/
+result
+/yaoe-client-config/
+/yaoe-client-*/
+**/*.rs.bk
+*.zip
+tmp/

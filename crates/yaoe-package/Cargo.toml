@@ -1,0 +1,18 @@
+[package]
+name = "yaoe-package"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+flate2.workspace = true
+serde.workspace = true
+tar.workspace = true
+toml.workspace = true
+tempfile.workspace = true
+yaoe-server-installer.workspace = true
+yaoe-home.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
