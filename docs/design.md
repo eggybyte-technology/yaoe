@@ -3,7 +3,7 @@
 ## 0. Document Contract
 
 | Field                                   | Value                                                                                                                                                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | -------- | ------- | ------- | --------- |
 | Project                                 | `yaoe`                                                                                                                                                                                                       |
 | Product revision                        | `v0.0.1`                                                                                                                                                                                                     |
 | License                                 | Apache License 2.0                                                                                                                                                                                           |
@@ -15,11 +15,12 @@
 | Managed server protocol                 | VLESS over TCP with TLS Reality and Vision flow                                                                                                                                                              |
 | Managed server TLS certificate          | None                                                                                                                                                                                                         |
 | Linux desktop service client            | YAOE-installed sing-box systemd service on amd64 and arm64                                                                                                                                                   |
+| Linux system image client               | YAOE-staged sing-box systemd service in the current Linux root filesystem during image builds                                                                                                                |
 | macOS desktop service client            | YAOE-installed sing-box launchd service on Intel and Apple Silicon                                                                                                                                           |
 | Windows desktop GUI client              | Clash Verge Rev importing one YAOE-generated mihomo profile                                                                                                                                                  |
 | macOS desktop GUI client                | Clash Verge Rev importing the same YAOE-generated mihomo profile                                                                                                                                             |
 | Linux desktop GUI client                | Clash Verge Rev importing the same YAOE-generated mihomo profile                                                                                                                                             |
-| Clash Verge Rev reference release       | `v2.5.1`, GitHub Latest stable release dated 2026-05-20                                                                                                                                                      |
+| Clash Verge Rev reference release       | `v2.5.1`, reference stable release dated 2026-05-20                                                                                                                                                          |
 | Clash Verge Rev bundled mihomo baseline | mihomo `v1.19.25` from Clash Verge Rev `v2.5.0` release notes                                                                                                                                                |
 | Standalone mihomo validation release    | mihomo `v1.19.27`                                                                                                                                                                                            |
 | Mobile client model                     | Official sing-box graphical clients importing YAOE-generated sing-box Remote Profiles                                                                                                                        |
@@ -28,6 +29,7 @@
 | Config delivery store                   | Cloudflare R2 public bucket through one custom domain                                                                                                                                                        |
 | Config request credential               | URL path segment equal to `credential.config_key`                                                                                                                                                            |
 | Service desktop config variants         | `linux-amd64`, `linux-arm64`, `macos-amd64`, `macos-arm64`                                                                                                                                                   |
+| Linux image config variants             | `linux-amd64`, `linux-arm64`                                                                                                                                                                                 |
 | Mobile config variants                  | `ios`, `android`                                                                                                                                                                                             |
 | GUI config variant                      | `clash-verge`                                                                                                                                                                                                |
 | Published config objects                | `clash-verge.yaml`, `linux-amd64.json`, `linux-arm64.json`, `macos-amd64.json`, `macos-arm64.json`, `ios.json`, `android.json`                                                                               |
@@ -39,49 +41,56 @@
 | Rust test runner                        | `cargo nextest run`                                                                                                                                                                                          |
 | Development environment                 | Nix flake default devShell loaded by direnv                                                                                                                                                                  |
 | Environment entrypoint                  | `.envrc` containing exactly `use flake`                                                                                                                                                                      |
-| Client entrypoint command               | `yaoe client`                                                                                                                                                                                                |
+| Client entrypoint command               | `yaoe client [--all                                                                                                                                                                                          | --gui | --mobile | --linux | --macos | --image]` |
 | Runtime health probe                    | Local sing-box `mixed` inbound with SOCKS5 remote hostname resolution probing VLESS/TCP/Reality/Vision without TUN                                                                                           |
 | Client routing model                    | Private/local, NetBird overlay, configured direct IPv4 CIDRs, managed-server endpoint IPv4 `/32`, NetBird control domains, and CN allowlist traffic are direct; remaining public IPv4 uses proxy aggregation |
 | NetBird compatibility model             | Default in every generated client config; `100.64.0.0/10`, NetBird process names, NetBird Cloud/control domains, STUN/TURN/relay domains, and direct DNS rules are explicit built-ins                        |
 | Acceptance validation                   | nextest-controlled controller workflow ending in `yaoe health`                                                                                                                                               |
 
-This document is the complete engineering contract for YAOE `v0.0.1`. Implementation, repository layout, command surface, configuration file, local state, generated artifacts, Gitee publication, Cloudflare R2 publication, Reality server installation, desktop client entrypoints, mobile client entrypoints, tests, acceptance, logs, and README content are valid when they match this document.
+This document is the complete engineering contract for YAOE `v0.0.1`. Implementation, repository layout, command surface, configuration file, local state, generated artifacts, Gitee publication, Cloudflare R2 publication, Reality server installation, desktop client entrypoints, mobile client entrypoints, Linux image client entrypoints, tests, acceptance, logs, and README content are valid when they match this document.
 
-YAOE `v0.0.1` is a single-operator egress and profile-delivery tool. It provisions one or more public Linux amd64 or arm64 egress servers. Each managed server exposes exactly one sing-box VLESS/TCP/Reality/Vision inbound on a configured high TCP port and is installed over root SSH as one systemd service. Linux and macOS service clients install sing-box as a local system service through public YAOE scripts. Windows users import a generated mihomo profile into Clash Verge Rev. macOS and Linux users receive the same Clash Verge Rev profile in addition to the sing-box service entrypoints. iOS and Android users import generated sing-box Remote Profile URLs into official sing-box graphical clients.
+YAOE `v0.0.1` is a single-operator egress and profile-delivery tool. It provisions one or more public Linux amd64 or arm64 egress servers. Each managed server exposes exactly one sing-box VLESS/TCP/Reality/Vision inbound on a configured high TCP port and is installed over root SSH as one systemd service. Linux and macOS runtime service clients install sing-box as a local system service through public YAOE scripts. Linux image clients stage the same Linux service into a target root filesystem through a separate public image script. Windows users import a generated mihomo profile into Clash Verge Rev. macOS and Linux users can use the same Clash Verge Rev profile. iOS and Android users import generated sing-box Remote Profile URLs into official sing-box graphical clients.
 
 ### 0.1 Normative Terms
 
-| Term                   | Meaning                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MUST                   | Required behavior.                                                                                                                                                                                         |
-| REQUIRED               | Required input or behavior.                                                                                                                                                                                |
-| EXACT                  | Byte-level, field-level, or sequence-level equality as specified.                                                                                                                                          |
-| INVALID                | Rejected before the command performs external side effects.                                                                                                                                                |
-| DEFAULT                | Value used when a configuration field is absent.                                                                                                                                                           |
-| Repository context     | Repository root on Linux after direnv has loaded the default Nix devShell.                                                                                                                                 |
-| Operator               | The single person or automation process that edits `.yaoe/yaoe.toml` and runs `yaoe`.                                                                                                                      |
-| Managed server         | One Linux amd64 or arm64 public egress server declared as `[server.<name>]`.                                                                                                                               |
-| Desktop service client | A Linux or macOS machine that runs the YAOE sing-box install or update script.                                                                                                                             |
-| Desktop GUI client     | A Windows, macOS, or Linux machine running Clash Verge Rev and importing `clash-verge.yaml`.                                                                                                               |
-| Mobile client          | An official sing-box graphical client that imports the YAOE `ios.json` or `android.json` Remote Profile URL.                                                                                               |
-| Config key             | The value of `credential.config_key` in `.yaoe/yaoe.toml`.                                                                                                                                                 |
-| Config object key      | An R2 object key under `config/<credential.config_key>/`.                                                                                                                                                  |
-| GUI profile URL        | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/clash-verge.yaml`.                                                                                                                    |
-| Clash import URL       | `clash://install-config?url=<percent-encoded-gui-profile-url>`.                                                                                                                                            |
-| Service config URL     | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/<service-variant>.json`.                                                                                                              |
-| Mobile profile URL     | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/<mobile-variant>.json`.                                                                                                               |
-| Reality private key    | The value of `credential.reality_private_key` in `.yaoe/yaoe.toml`.                                                                                                                                        |
-| Reality public key     | The X25519 public key derived from `credential.reality_private_key`; it is a derived value.                                                                                                                |
-| Reality short ID       | The value of `credential.reality_short_id` in `.yaoe/yaoe.toml`.                                                                                                                                           |
-| CN direct SRS          | The two Gitee-published sing-box binary rule-set files `cn-domain.srs` and `cn-ipv4.srs`.                                                                                                                  |
-| Effectful command      | A command that changes `.yaoe/`, contacts GitHub, contacts Gitee, contacts Cloudflare, contacts SSH targets, installs or restarts a service, publishes delivery assets, or runs active runtime validation. |
-| Atomic write           | Write to a temporary file in the destination directory, flush the file, rename over the destination, and flush the containing directory.                                                                   |
+| Term                   | Meaning                                                                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MUST                   | Required behavior.                                                                                                                                                                                                                               |
+| REQUIRED               | Required input or behavior.                                                                                                                                                                                                                      |
+| EXACT                  | Byte-level, field-level, or sequence-level equality as specified.                                                                                                                                                                                |
+| INVALID                | Rejected before the command performs external side effects.                                                                                                                                                                                      |
+| DEFAULT                | Value used when a configuration field is absent.                                                                                                                                                                                                 |
+| Repository context     | Repository root on Linux after direnv has loaded the default Nix devShell.                                                                                                                                                                       |
+| Operator               | The single person or automation process that edits `.yaoe/yaoe.toml` and runs `yaoe`.                                                                                                                                                            |
+| Managed server         | One Linux amd64 or arm64 public egress server declared as `[server.<name>]`.                                                                                                                                                                     |
+| Desktop service client | A booted Linux or macOS machine that runs the YAOE sing-box runtime install or update script and expects a running system service after the script completes.                                                                                    |
+| Linux image client     | A Linux root filesystem image build environment that runs the YAOE image install script inside the target root and receives staged binary, config, systemd unit, and boot enablement without runtime start.                                      |
+| Desktop GUI client     | A Windows, macOS, or Linux machine running Clash Verge Rev and importing `clash-verge.yaml`.                                                                                                                                                     |
+| Mobile client          | An official sing-box graphical client that imports the YAOE `ios.json` or `android.json` Remote Profile URL.                                                                                                                                     |
+| Client selector        | A `yaoe client` selector flag that chooses one entrypoint group: `--all`, `--gui`, `--mobile`, `--linux`, `--macos`, or `--image`.                                                                                                               |
+| Config key             | The value of `credential.config_key` in `.yaoe/yaoe.toml`.                                                                                                                                                                                       |
+| Config object key      | An R2 object key under `config/<credential.config_key>/`.                                                                                                                                                                                        |
+| GUI profile URL        | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/clash-verge.yaml`.                                                                                                                                                          |
+| Clash import URL       | `clash://install-config?url=<percent-encoded-gui-profile-url>`.                                                                                                                                                                                  |
+| Service config URL     | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/<service-variant>.json`.                                                                                                                                                    |
+| Mobile profile URL     | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/<mobile-variant>.json`.                                                                                                                                                     |
+| Linux image config URL | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/linux-<arch>.json`, where `<arch>` is `amd64` or `arm64`.                                                                                                                   |
+| Reality private key    | The value of `credential.reality_private_key` in `.yaoe/yaoe.toml`.                                                                                                                                                                              |
+| Reality public key     | The X25519 public key derived from `credential.reality_private_key`; it is a derived value.                                                                                                                                                      |
+| Reality short ID       | The value of `credential.reality_short_id` in `.yaoe/yaoe.toml`.                                                                                                                                                                                 |
+| CN direct SRS          | The two Gitee-published sing-box binary rule-set files `cn-domain.srs` and `cn-ipv4.srs`.                                                                                                                                                        |
+| Effectful command      | A command that changes `.yaoe/`, contacts GitHub, contacts Gitee, contacts Cloudflare, contacts SSH targets, installs or restarts a runtime service, stages a Linux image service, publishes delivery assets, or runs active runtime validation. |
+| Atomic write           | Write to a temporary file in the destination directory, flush the file, rename over the destination, and flush the containing directory.                                                                                                         |
 
 ### 0.2 Architecture Decisions
 
 The managed-server protocol is VLESS/TCP/Reality/Vision on sing-box `1.13.13`. The server-side design uses direct IPv4 endpoints and a third-party Reality handshake destination. It requires no server-owned TLS certificate and no server endpoint DNS name.
 
-The desktop service path exists for Linux and macOS. Linux service clients run sing-box under systemd. macOS service clients run sing-box under launchd. The service clients receive architecture-specific sing-box JSON configs from Cloudflare R2 and architecture-specific sing-box runtime artifacts from Gitee Release.
+The client model is entrypoint-registry based. `yaoe client` derives client entrypoints from the same registry used by script rendering, publication, README examples, and tests. The default `yaoe client` output is the concise human-device set: Clash Verge Rev GUI plus iOS and Android Remote Profile URLs. Runtime service clients and image clients are explicit selector outputs.
+
+The desktop service path exists for booted Linux and macOS machines. Linux service clients run sing-box under systemd. macOS service clients run sing-box under launchd. These runtime scripts install or update local artifacts, start or restart the service, verify active/running state, and perform diagnostic smoke probes.
+
+The Linux image path is a separate client kind. The image script is `install/linux-image.sh`. It stages the Linux sing-box binary, Linux service config, systemd unit, and `multi-user.target` enablement symlink into the current root filesystem. The caller enters the target root before executing the script. The script uses `YAOE_IMAGE_ARCH=amd64|arm64` to select the target artifact and config, and it performs no runtime service control.
 
 The desktop GUI path uses one mihomo YAML profile named `clash-verge.yaml`. The same profile is valid for Windows, macOS, and Linux Clash Verge Rev clients. YAOE generates the complete mihomo profile from `.yaoe/yaoe.toml`, including VLESS Reality nodes, URLTest aggregation, DNS, TUN settings, geodata settings, and routing rules. Users import the URL or the `clash://install-config` URL scheme; users do not edit rules or node YAML.
 
@@ -90,8 +99,8 @@ The mobile path uses official sing-box graphical clients. YAOE publishes `ios.js
 The link distribution model has three surfaces:
 
 ```text
-Gitee Release attachments -> sing-box runtime artifacts for Linux/macOS service clients, Linux amd64 and arm64 server runtime fallback, and CN direct SRS files
-Gitee repository raw files -> Linux/macOS service install and update scripts
+Gitee Release attachments -> sing-box runtime artifacts for Linux/macOS runtime service clients, Linux image clients, Linux amd64 and arm64 server runtime fallback, and CN direct SRS files
+Gitee repository raw files -> Linux/macOS runtime service scripts and the Linux image install script
 Cloudflare R2 custom-domain objects -> all generated client configs
 ```
 
@@ -116,11 +125,18 @@ CLASH_VERGE_REV_REFERENCE_DATE = "2026-05-20"
 CLASH_VERGE_MIHOMO_BASELINE_VERSION = "1.19.25"
 GITEE_BOOTSTRAP_BRANCH = "main"
 GITEE_RELEASE_TAG = "yaoe-v0.0.1-sing-box-1.13.13"
+CLIENT_ENTRYPOINT_SELECTORS = ["default", "all", "gui", "mobile", "linux", "macos", "image"]
+CLIENT_ENTRYPOINTS = ["clash-verge", "ios", "android", "linux-service", "macos-service", "linux-image"]
+DEFAULT_CLIENT_ENTRYPOINTS = ["clash-verge", "ios", "android"]
 SERVICE_SCRIPT_TARGETS = ["linux", "macos"]
+IMAGE_SCRIPT_TARGETS = ["linux-image"]
+BOOTSTRAP_SCRIPT_PATHS = ["install/linux.sh", "update/linux.sh", "install/macos.sh", "update/macos.sh", "install/linux-image.sh"]
 SERVICE_CONFIG_VARIANTS = ["linux-amd64", "linux-arm64", "macos-amd64", "macos-arm64"]
 MOBILE_CONFIG_VARIANTS = ["ios", "android"]
 GUI_CONFIG_VARIANTS = ["clash-verge"]
 CONFIG_VARIANTS = ["clash-verge", "linux-amd64", "linux-arm64", "macos-amd64", "macos-arm64", "ios", "android"]
+IMAGE_CONFIG_VARIANTS = ["linux-amd64", "linux-arm64"]
+IMAGE_ARCH_VALUES = ["amd64", "arm64"]
 MANAGED_SERVER_RUNTIME_VARIANTS = ["linux-amd64", "linux-arm64"]
 CONFIG_KEY_RANDOM_BYTES = 96
 CONFIG_KEY_LENGTH = 128
@@ -212,17 +228,24 @@ The service platform registry contains exactly these entries:
 | `macos-amd64`  | `macos`       | `uname -s == Darwin` | `uname -m == x86_64`             | `macos-amd64.json` | `sing-box-1.13.13-macos-amd64.tar.gz` | `sing-box-1.13.13-darwin-amd64.tar.gz` | launchd         | `macos-service` | `service`     |
 | `macos-arm64`  | `macos`       | `uname -s == Darwin` | `uname -m == arm64`              | `macos-arm64.json` | `sing-box-1.13.13-macos-arm64.tar.gz` | `sing-box-1.13.13-darwin-arm64.tar.gz` | launchd         | `macos-service` | `service`     |
 
+The Linux image client platform registry contains exactly these entries:
+
+| Image arch | Config variant | Script path              | Public config file | Public runtime asset                  | System service unit     | Enablement path                                                     |
+| ---------- | -------------- | ------------------------ | ------------------ | ------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| `amd64`    | `linux-amd64`  | `install/linux-image.sh` | `linux-amd64.json` | `sing-box-1.13.13-linux-amd64.tar.gz` | `yaoe-sing-box.service` | `/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service` |
+| `arm64`    | `linux-arm64`  | `install/linux-image.sh` | `linux-arm64.json` | `sing-box-1.13.13-linux-arm64.tar.gz` | `yaoe-sing-box.service` | `/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service` |
+
 The generated config registry contains exactly these entries:
 
-| Config variant | Kind            | Public config file | R2 object key                                     | Validation command         |
-| -------------- | --------------- | ------------------ | ------------------------------------------------- | -------------------------- |
-| `clash-verge`  | desktop GUI     | `clash-verge.yaml` | `config/<credential.config_key>/clash-verge.yaml` | `mihomo -t -f <file>`      |
-| `linux-amd64`  | service desktop | `linux-amd64.json` | `config/<credential.config_key>/linux-amd64.json` | `sing-box check -c <file>` |
-| `linux-arm64`  | service desktop | `linux-arm64.json` | `config/<credential.config_key>/linux-arm64.json` | `sing-box check -c <file>` |
-| `macos-amd64`  | service desktop | `macos-amd64.json` | `config/<credential.config_key>/macos-amd64.json` | `sing-box check -c <file>` |
-| `macos-arm64`  | service desktop | `macos-arm64.json` | `config/<credential.config_key>/macos-arm64.json` | `sing-box check -c <file>` |
-| `ios`          | mobile          | `ios.json`         | `config/<credential.config_key>/ios.json`         | `sing-box check -c <file>` |
-| `android`      | mobile          | `android.json`     | `config/<credential.config_key>/android.json`     | `sing-box check -c <file>` |
+| Config variant | Kind                | Public config file | R2 object key                                     | Validation command         |
+| -------------- | ------------------- | ------------------ | ------------------------------------------------- | -------------------------- |
+| `clash-verge`  | desktop GUI         | `clash-verge.yaml` | `config/<credential.config_key>/clash-verge.yaml` | `mihomo -t -f <file>`      |
+| `linux-amd64`  | Linux service/image | `linux-amd64.json` | `config/<credential.config_key>/linux-amd64.json` | `sing-box check -c <file>` |
+| `linux-arm64`  | Linux service/image | `linux-arm64.json` | `config/<credential.config_key>/linux-arm64.json` | `sing-box check -c <file>` |
+| `macos-amd64`  | service desktop     | `macos-amd64.json` | `config/<credential.config_key>/macos-amd64.json` | `sing-box check -c <file>` |
+| `macos-arm64`  | service desktop     | `macos-arm64.json` | `config/<credential.config_key>/macos-arm64.json` | `sing-box check -c <file>` |
+| `ios`          | mobile              | `ios.json`         | `config/<credential.config_key>/ios.json`         | `sing-box check -c <file>` |
+| `android`      | mobile              | `android.json`     | `config/<credential.config_key>/android.json`     | `sing-box check -c <file>` |
 
 The Gitee Release asset registry contains exactly these entries:
 
@@ -242,6 +265,7 @@ install/linux.sh
 update/linux.sh
 install/macos.sh
 update/macos.sh
+install/linux-image.sh
 ```
 
 ### 0.4 Derived Values
@@ -260,7 +284,9 @@ The implementation MUST derive these values from `.yaoe/yaoe.toml` and constants
 | Config URLs                     | For every entry in `CONFIG_VARIANTS`: `https://<cloudflare.delivery_domain>/config/<credential.config_key>/<public-config-file>`. |
 | Desktop GUI profile URL         | `https://<cloudflare.delivery_domain>/config/<credential.config_key>/clash-verge.yaml`.                                           |
 | Clash import URL                | `clash://install-config?url=<percent-encoded-desktop-gui-profile-url>`.                                                           |
-| Service script paths            | For every entry in `SERVICE_SCRIPT_TARGETS`: `install/<target>.<ext>` and `update/<target>.<ext>`, where `<ext>` is `sh`.         |
+| Bootstrap script paths          | Exactly the entries of `BOOTSTRAP_SCRIPT_PATHS` under Gitee branch `main`.                                                        |
+| Runtime service script paths    | For every entry in `SERVICE_SCRIPT_TARGETS`: `install/<target>.sh` and `update/<target>.sh`.                                      |
+| Linux image script path         | `install/linux-image.sh`.                                                                                                         |
 | Server outbound tags            | `egress-<server-name>`.                                                                                                           |
 | Cloudflare zone ID              | Longest accessible Cloudflare zone suffix for `cloudflare.delivery_domain`.                                                       |
 | Health probe mixed inbound bind | `127.0.0.1:<probe-port>`, where `<probe-port>` is selected by the controller for one probe execution.                             |
@@ -297,7 +323,10 @@ yaoe render config
   stdout: exactly the local render block in section 5.4
 
 yaoe client
-  stdout: exactly the client entrypoint block in section 5.5
+  stdout: exactly the default client entrypoint blocks in section 5.5
+
+yaoe client --all|--gui|--mobile|--linux|--macos|--image
+  stdout: exactly the selected client entrypoint blocks in section 5.5
 
 yaoe publish config
   stdout: one line per config variant after public validation succeeds:
@@ -372,8 +401,9 @@ YAOE `v0.0.1` maintains public Linux amd64 or arm64 egress servers and publishes
 2. A complete Clash Verge Rev mihomo YAML profile for Windows, macOS, and Linux GUI users.
 3. sing-box service JSON configs for Linux and macOS service users.
 4. sing-box Remote Profile JSON configs for iOS and Android users.
-5. Public install/update scripts for Linux and macOS service users.
-6. Public runtime and CN direct rule-set assets for service and mobile profiles.
+5. Public runtime install/update scripts for Linux and macOS service users.
+6. One public Linux image install script for root filesystem image builds.
+7. Public runtime and CN direct rule-set assets for service, image, and mobile profiles.
 
 The service delivery surfaces are exactly:
 
@@ -411,22 +441,25 @@ YAOE `v0.0.1` implements exactly these behaviors:
 8. Shared Reality private key and short ID stored in `.yaoe/yaoe.toml` and used for every server and every generated profile.
 9. Reality public key derived from the private key and used in generated client and probe configs.
 10. Shared config key stored in `.yaoe/yaoe.toml` and used as the only config object path credential.
-11. `yaoe client` as the exact command for printing GUI, mobile, Linux service, and macOS service entrypoints.
-12. Runtime sync of sing-box `1.13.13` artifacts for Linux amd64, Linux arm64, macOS amd64, and macOS arm64 into a Gitee Release.
-13. Runtime sync of CN direct SRS files into the same Gitee Release as `cn-domain.srs` and `cn-ipv4.srs`.
-14. Rendering and publication of four public service scripts: install and update for Linux, install and update for macOS.
-15. Rendering and publication of seven config objects to Cloudflare R2.
-16. Linux service install scripts that detect CPU architecture, install the matching sing-box binary, install service definition, install the matching config, and start the systemd service.
-17. Linux service update scripts that detect CPU architecture, replace only the matching local config, and restart the existing systemd service.
-18. macOS service install scripts that detect CPU architecture, install the matching sing-box binary, install launchd plist, install the matching config, and start the launchd service.
-19. macOS service update scripts that detect CPU architecture, replace only the matching local config, and restart the existing launchd service.
-20. Desktop GUI config delivery through Clash Verge Rev Remote Profile URL and URL Scheme import URL.
-21. Mobile config delivery through official sing-box graphical-client Remote Profile URLs.
-22. Server status command through root SSH.
-23. Server health command through root SSH plus a local sing-box `mixed` inbound active Reality probe.
-24. Explicit local credential rotation commands for config key, VLESS UUID, and Reality keypair.
-25. Functional tests colocated with owning modules and crates.
-26. Real acceptance validation orchestrated by nextest as a controller workflow ending in `yaoe health`.
+11. `yaoe client` as the exact command family for printing selected client entrypoints.
+12. `yaoe client` without selector prints only the default GUI and mobile entrypoints.
+13. `yaoe client --linux`, `yaoe client --macos`, and `yaoe client --image` print runtime service and image-build entrypoints separately.
+14. Runtime sync of sing-box `1.13.13` artifacts for Linux amd64, Linux arm64, macOS amd64, and macOS arm64 into a Gitee Release.
+15. Runtime sync of CN direct SRS files into the same Gitee Release as `cn-domain.srs` and `cn-ipv4.srs`.
+16. Rendering and publication of five public bootstrap scripts: Linux runtime install/update, macOS runtime install/update, and Linux image install.
+17. Rendering and publication of seven config objects to Cloudflare R2.
+18. Linux runtime service install scripts detect CPU architecture, install the matching sing-box binary, install service definition, install the matching config, and start the systemd service.
+19. Linux runtime service update scripts detect CPU architecture, replace only the matching local config, and restart the existing systemd service.
+20. Linux image install scripts require `YAOE_IMAGE_ARCH`, install the matching sing-box binary, install the matching Linux service config, install the systemd unit, and enable it by symlink in the current root filesystem.
+21. macOS runtime service install scripts detect CPU architecture, install the matching sing-box binary, install launchd plist, install the matching config, and start the launchd service.
+22. macOS runtime service update scripts detect CPU architecture, replace only the matching local config, and restart the existing launchd service.
+23. Desktop GUI config delivery through Clash Verge Rev Remote Profile URL and URL Scheme import URL.
+24. Mobile config delivery through official sing-box graphical-client Remote Profile URLs.
+25. Server status command through root SSH.
+26. Server health command through root SSH plus a local sing-box `mixed` inbound active Reality probe.
+27. Explicit local credential rotation commands for config key, VLESS UUID, and Reality keypair.
+28. Functional tests colocated with owning modules and crates.
+29. Real acceptance validation orchestrated by nextest as a controller workflow ending in `yaoe health`.
 
 ### 1.3 Fixed Data Flow
 
@@ -451,7 +484,7 @@ Runtime publication:
 yaoe publish runtime
   -> load and validate .yaoe/yaoe.toml
   -> ensure the Gitee delivery repository exists
-  -> ensure branch main exists with YAOE service scripts when the repository has no main branch
+  -> ensure branch main exists with YAOE bootstrap scripts when the repository has no main branch
   -> ensure the fixed Gitee Release exists
   -> fetch or reuse four sing-box service runtime artifacts
   -> fetch or reuse two CN direct SRS files
@@ -464,8 +497,8 @@ Bootstrap publication:
 yaoe publish bootstrap
   -> load and validate .yaoe/yaoe.toml
   -> ensure the Gitee delivery repository exists
-  -> render four Linux/macOS service scripts
-  -> ensure branch main exists with YAOE service scripts when the repository has no main branch
+  -> render five bootstrap scripts
+  -> ensure branch main exists with YAOE bootstrap scripts when the repository has no main branch
   -> publish changed scripts to Gitee branch main using local marker semantics
 ```
 
@@ -513,10 +546,11 @@ yaoe publish delivery
 Client entrypoint derivation:
 
 ```text
-yaoe client
+yaoe client [selector]
   -> parse .yaoe/yaoe.toml
   -> validate fields needed to derive entrypoint URLs and script commands
-  -> print Clash Verge Rev entrypoints, mobile Remote Profile URLs, Linux service commands, and macOS service commands
+  -> expand the default selector or one explicit selector
+  -> print the selected client entrypoint blocks from section 5.5
 ```
 
 Desktop GUI import:
@@ -529,12 +563,12 @@ operator runs yaoe client
   -> mihomo runs VLESS/TCP/Reality/Vision with generated DNS, TUN, geodata, URLTest, and route rules
 ```
 
-Linux/macOS service install:
+Linux/macOS runtime service install:
 
 ```text
-operator obtains OS-level command from yaoe client
+operator obtains OS-level command from yaoe client --linux or yaoe client --macos
   -> operator supplies YAOE_CONFIG_KEY in the shell environment exactly as printed
-  -> desktop service client runs the public OS-level install script from Gitee raw URL
+  -> desktop service client runs the public OS-level runtime install script from Gitee raw URL
   -> script validates OS, privilege, YAOE_CONFIG_KEY syntax, and local CPU architecture
   -> script derives the service config variant from OS and CPU architecture
   -> script downloads the matching sing-box runtime from Gitee Release
@@ -545,6 +579,21 @@ operator obtains OS-level command from yaoe client
   -> script atomically promotes config
   -> script starts or restarts the local service
   -> script requires active/running service state
+```
+
+Linux image install:
+
+```text
+operator runs yaoe client --image
+  -> operator selects the amd64 or arm64 image command
+  -> image builder enters the target Linux root filesystem
+  -> image builder runs install/linux-image.sh from Gitee raw URL as root with YAOE_CONFIG_KEY and YAOE_IMAGE_ARCH
+  -> script validates Linux process OS, root privileges, config key shape, and image architecture
+  -> script derives linux-amd64 or linux-arm64 from YAOE_IMAGE_ARCH
+  -> script downloads the matching sing-box runtime from Gitee Release
+  -> script downloads config from https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/<variant>.json
+  -> script writes binary, config, and systemd unit into the current root filesystem
+  -> script enables yaoe-sing-box.service by creating the multi-user.target.wants symlink
 ```
 
 Mobile remote profile import:
@@ -715,20 +764,20 @@ The committed repository layout is:
     └── yaoe-server-installer/
 ```
 
-| Crate                   | Responsibility                                                                                                                                                                                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `yaoe-cli`              | Argument parsing, command dispatch, stdout contracts, stderr log formatting, ANSI color policy, exit-code mapping.                                                                                                                                                        |
-| `yaoe-config`           | `.yaoe/yaoe.toml` parsing, defaults, normalization, validation, client-entrypoint validation, Reality public key derivation, and credential file updates for rotate commands.                                                                                             |
-| `yaoe-home`             | Fixed `.yaoe/` paths for cache, state, work files, generated delivery workspaces, health probe work files, server packages, Gitee worktrees, and acceptance workspace.                                                                                                    |
-| `yaoe-cloudflare`       | Cloudflare zone resolution, R2 bucket orchestration, R2 custom-domain orchestration, Wrangler orchestration, public R2 URL construction, and public config fetch validation.                                                                                              |
-| `yaoe-gitee`            | Gitee repository existence, repository creation, branch `main` baseline creation, service script publication, release lookup, release creation, release asset lookup, release asset upload, local publication marker handling, and public URL construction.               |
-| `yaoe-upstream`         | Upstream artifact fetching for sing-box service/runtime assets using the platform registry.                                                                                                                                                                               |
-| `yaoe-rules`            | CN direct SRS HTTPS fetching, byte-for-byte mirroring to Gitee release assets, fixed public names.                                                                                                                                                                        |
-| `yaoe-render`           | Platform registry, Reality sing-box server JSON, Linux/macOS service sing-box JSON, mobile sing-box JSON, Clash Verge Rev mihomo YAML, health probe JSON, Linux/macOS install scripts, Linux/macOS update scripts, systemd units, launchd plists, server install scripts. |
-| `yaoe-package`          | Server transfer package assembly.                                                                                                                                                                                                                                         |
-| `yaoe-ssh`              | Root SSH/SCP execution, remote reads, remote status commands, remote journal tail collection.                                                                                                                                                                             |
-| `yaoe-controller`       | User command workflows across config, home, upstream, Gitee, Cloudflare R2, rendering, packaging, SSH, delivery publication, client entrypoint derivation, rotation, status, health, and acceptance orchestration.                                                        |
-| `yaoe-server-installer` | Target-side Linux managed-server installer script generation.                                                                                                                                                                                                             |
+| Crate                   | Responsibility                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `yaoe-cli`              | Argument parsing, command dispatch, stdout contracts, stderr log formatting, ANSI color policy, exit-code mapping.                                                                                                                                                                                                    |
+| `yaoe-config`           | `.yaoe/yaoe.toml` parsing, defaults, normalization, validation, client-entrypoint validation, Reality public key derivation, and credential file updates for rotate commands.                                                                                                                                         |
+| `yaoe-home`             | Fixed `.yaoe/` paths for cache, state, work files, generated delivery workspaces, health probe work files, server packages, Gitee worktrees, and acceptance workspace.                                                                                                                                                |
+| `yaoe-cloudflare`       | Cloudflare zone resolution, R2 bucket orchestration, R2 custom-domain orchestration, Wrangler orchestration, public R2 URL construction, and public config fetch validation.                                                                                                                                          |
+| `yaoe-gitee`            | Gitee repository existence, repository creation, branch `main` baseline creation, service script publication, release lookup, release creation, release asset lookup, release asset upload, local publication marker handling, and public URL construction.                                                           |
+| `yaoe-upstream`         | Upstream artifact fetching for sing-box service/runtime assets using the platform registry.                                                                                                                                                                                                                           |
+| `yaoe-rules`            | CN direct SRS HTTPS fetching, byte-for-byte mirroring to Gitee release assets, fixed public names.                                                                                                                                                                                                                    |
+| `yaoe-render`           | Platform registry, Reality sing-box server JSON, Linux/macOS service sing-box JSON, mobile sing-box JSON, Clash Verge Rev mihomo YAML, health probe JSON, Linux/macOS runtime install scripts, Linux/macOS runtime update scripts, Linux image install script, systemd units, launchd plists, server install scripts. |
+| `yaoe-package`          | Server transfer package assembly.                                                                                                                                                                                                                                                                                     |
+| `yaoe-ssh`              | Root SSH/SCP execution, remote reads, remote status commands, remote journal tail collection.                                                                                                                                                                                                                         |
+| `yaoe-controller`       | User command workflows across config, home, upstream, Gitee, Cloudflare R2, rendering, packaging, SSH, delivery publication, client entrypoint derivation, rotation, status, health, and acceptance orchestration.                                                                                                    |
+| `yaoe-server-installer` | Target-side Linux managed-server installer script generation.                                                                                                                                                                                                                                                         |
 
 `yaoe-controller` keeps command workflows in `lib.rs` and isolates cross-cutting controller concerns in internal modules:
 
@@ -866,7 +915,7 @@ SSH key paths are absolute or start with `~/`. Empty strings, whitespace-only st
 | `owner` | string | required | Gitee user or organization namespace.                                                                           |
 | `repo`  | string | required | Gitee repository name.                                                                                          |
 
-YAOE creates missing delivery repositories as public repositories. YAOE writes service scripts to branch `main`. YAOE writes release assets to release tag `yaoe-v0.0.1-sing-box-1.13.13`.
+YAOE creates missing delivery repositories as public repositories. YAOE writes bootstrap scripts to branch `main`. YAOE writes release assets to release tag `yaoe-v0.0.1-sing-box-1.13.13`.
 
 `[credential]` fields:
 
@@ -974,16 +1023,28 @@ The controller applies full validation before every effectful command except `in
 
 ### 3.5 Client Entrypoint Validation Rules
 
-`yaoe client` applies this validation profile:
+`yaoe client [selector]` applies selector-specific validation. All selectors apply these base rules:
 
 1. `.yaoe/yaoe.toml` parses as TOML 1.0.0.
 2. Allowed root tables are exactly `ssh`, `cloudflare`, `gitee`, `credential`, `reality`, `route`, and `server`.
 3. Allowed fields are exactly the fields in section 3.3.
 4. `[cloudflare].delivery_domain` is required, is a lowercase ASCII FQDN without trailing dot, contains at least three labels, and is not an init placeholder.
 5. `[credential].config_key` is required, matches `^[A-Za-z0-9_-]{128}$`, and is not an init placeholder.
-6. `[gitee].owner` is required, satisfies section 3.4 rule 12, and is not an init placeholder.
-7. `[gitee].repo` is required, satisfies section 3.4 rule 12, and is not an init placeholder.
-8. Other present fields parse according to schema.
+6. Other present fields parse according to schema.
+
+Additional selector rules are exact:
+
+| Invocation selector | Additional required fields      |
+| ------------------- | ------------------------------- |
+| default             | None                            |
+| `--gui`             | None                            |
+| `--mobile`          | None                            |
+| `--linux`           | `[gitee].owner`, `[gitee].repo` |
+| `--macos`           | `[gitee].owner`, `[gitee].repo` |
+| `--image`           | `[gitee].owner`, `[gitee].repo` |
+| `--all`             | `[gitee].owner`, `[gitee].repo` |
+
+When `[gitee].owner` is required, it satisfies section 3.4 rule 12 and is not an init placeholder. When `[gitee].repo` is required, it satisfies section 3.4 rule 12 and is not an init placeholder.
 
 ## 4. Local State, Cache, and Generated Workspaces
 
@@ -1126,7 +1187,7 @@ if the remote asset is wrong -> operator deletes the remote asset and the local 
 Gitee repository raw file uploads:
 
 ```text
-if the repository or branch was just created -> upload all four scripts and refresh .last files
+if the repository or branch was just created -> upload all five bootstrap scripts and refresh .last files
 else if rendered bytes equal .yaoe/cache/published/gitee-repo/main/<path>.last -> skip uploading that repository file without remote lookup
 else if the remote file exists and its bytes equal rendered bytes -> write the .last file and skip upload
 else publish the rendered file and atomically replace the .last file
@@ -1148,7 +1209,7 @@ YAOE commands are exactly:
 yaoe init
 yaoe check
 yaoe render config
-yaoe client
+yaoe client [--all|--gui|--mobile|--linux|--macos|--image]
 yaoe rotate config-key
 yaoe rotate vless-uuid
 yaoe rotate reality-keypair
@@ -1161,6 +1222,8 @@ yaoe status [<server>]
 yaoe health [<server>]
 ```
 
+`yaoe client` accepts at most one selector flag. Combining selector flags is INVALID and exits with code `2` before external side effects.
+
 ### 5.2 Command Roles
 
 | Command                       | Role                                                                                                                                                               | External contact                                          | Writes `.yaoe/` |
@@ -1168,13 +1231,13 @@ yaoe health [<server>]
 | `yaoe init`                   | Create fixed local layout and sample config when absent.                                                                                                           | No                                                        | Yes             |
 | `yaoe check`                  | Validate local config, home layout, credential syntax, Reality field syntax, derived Reality public key, R2 coordinates, Gitee coordinates, and server uniqueness. | No                                                        | No              |
 | `yaoe render config`          | Render and locally validate all seven generated client config objects without contacting Cloudflare, Gitee, SSH targets, or public HTTPS endpoints.                | No                                                        | Yes             |
-| `yaoe client`                 | Print Clash Verge Rev profile URLs, mobile Remote Profile URLs, Linux service install/update commands, and macOS service install/update commands.                  | No                                                        | No              |
+| `yaoe client [selector]`      | Print the exact client entrypoint blocks selected by the default selector or by one explicit selector flag.                                                        | No                                                        | No              |
 | `yaoe rotate config-key`      | Regenerate only the config path key.                                                                                                                               | No                                                        | Yes             |
 | `yaoe rotate vless-uuid`      | Regenerate only the VLESS UUID.                                                                                                                                    | No                                                        | Yes             |
 | `yaoe rotate reality-keypair` | Regenerate Reality private key and short ID.                                                                                                                       | No                                                        | Yes             |
 | `yaoe apply`                  | Package every configured server, upload over root SSH, install systemd service, and verify active service state.                                                   | Gitee/GitHub during runtime resolution, SSH               | Yes             |
 | `yaoe apply <server>`         | Run the same apply workflow for one named server.                                                                                                                  | Gitee/GitHub during runtime resolution, SSH               | Yes             |
-| `yaoe publish bootstrap`      | Publish public Linux/macOS service scripts to Gitee repository branch `main`.                                                                                      | Gitee                                                     | Yes             |
+| `yaoe publish bootstrap`      | Publish public bootstrap scripts to Gitee repository branch `main`.                                                                                                | Gitee                                                     | Yes             |
 | `yaoe publish runtime`        | Sync upstream sing-box artifacts and SRS files into Gitee Release with cache reuse.                                                                                | GitHub, Gitee                                             | Yes             |
 | `yaoe publish config`         | Render, validate, upload, publicly fetch, revalidate, and print seven client config URLs.                                                                          | Cloudflare R2, public HTTPS GET                           | Yes             |
 | `yaoe publish delivery`       | Run `publish bootstrap`, `publish runtime`, and `publish config` in that order.                                                                                    | GitHub, Gitee, Cloudflare R2, public HTTPS GET            | Yes             |
@@ -1189,7 +1252,7 @@ yaoe health [<server>]
 
 `render config` renders all seven client configs to `.yaoe/work/delivery/rendered-config/`, validates the mihomo YAML with `mihomo 1.19.27`, validates the six sing-box JSON configs with `sing-box 1.13.13`, prints one summary line per config variant, and contacts no network service.
 
-`client` derives and prints all client entrypoints. The command uses the validation profile in section 3.5. It does not check whether Gitee scripts or R2 config objects have been published.
+`client` derives and prints selected client entrypoint blocks. The command uses the validation profile in section 3.5. It does not check whether Gitee scripts or R2 config objects have been published. With no selector, it prints only the default GUI and mobile entrypoints. With one selector, it prints exactly that selector's entrypoint group.
 
 `apply` installs every configured server. `apply <server>` installs only the named server. Both forms use the same workflow and validation path.
 
@@ -1221,7 +1284,21 @@ render android .yaoe/work/delivery/rendered-config/android.json
 
 ### 5.5 `yaoe client` Output Contract
 
-`yaoe client` stdout is exact after placeholder substitution. Blocks appear in this order: `clash-verge remote-profile`, `clash-verge import-url`, `ios remote-profile`, `android remote-profile`, `linux sing-box install`, `linux sing-box update`, `macos sing-box install`, `macos sing-box update`. Blocks are separated by one blank line. The output ends with one newline.
+`yaoe client` stdout is exact after placeholder substitution. Blocks are separated by one blank line. The output ends with one newline.
+
+Selector expansion is exact:
+
+| Invocation             | Printed blocks                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `yaoe client`          | `clash-verge remote-profile`, `clash-verge import-url`, `ios remote-profile`, `android remote-profile` |
+| `yaoe client --gui`    | `clash-verge remote-profile`, `clash-verge import-url`                                                 |
+| `yaoe client --mobile` | `ios remote-profile`, `android remote-profile`                                                         |
+| `yaoe client --linux`  | `linux sing-box install`, `linux sing-box update`                                                      |
+| `yaoe client --macos`  | `macos sing-box install`, `macos sing-box update`                                                      |
+| `yaoe client --image`  | `linux image install amd64`, `linux image install arm64`                                               |
+| `yaoe client --all`    | All blocks in this section in the order shown below.                                                   |
+
+The complete block registry is exact:
 
 ```text
 clash-verge remote-profile
@@ -1255,6 +1332,16 @@ macos sing-box update
 export YAOE_CONFIG_KEY='<credential.config_key>'
 curl -fsSL https://gitee.com/<gitee.owner>/<gitee.repo>/raw/main/update/macos.sh \
   | sudo env YAOE_CONFIG_KEY="$YAOE_CONFIG_KEY" /bin/bash
+
+linux image install amd64
+export YAOE_CONFIG_KEY='<credential.config_key>'
+curl -fsSL https://gitee.com/<gitee.owner>/<gitee.repo>/raw/main/install/linux-image.sh \
+  | env YAOE_CONFIG_KEY="$YAOE_CONFIG_KEY" YAOE_IMAGE_ARCH=amd64 bash
+
+linux image install arm64
+export YAOE_CONFIG_KEY='<credential.config_key>'
+curl -fsSL https://gitee.com/<gitee.owner>/<gitee.repo>/raw/main/install/linux-image.sh \
+  | env YAOE_CONFIG_KEY="$YAOE_CONFIG_KEY" YAOE_IMAGE_ARCH=arm64 bash
 ```
 
 ### 5.6 Exit Codes
@@ -1280,7 +1367,7 @@ curl -fsSL https://gitee.com/<gitee.owner>/<gitee.repo>/raw/main/update/macos.sh
 
 ### 6.1 Gitee Repository and Release Roles
 
-Gitee Release is the authoritative public store for versioned binary and sing-box rule-set artifacts. Gitee repository raw files are the authoritative public store for Linux/macOS service bootstrap scripts.
+Gitee Release is the authoritative public store for versioned binary and sing-box rule-set artifacts. Gitee repository raw files are the authoritative public store for runtime service and image bootstrap scripts.
 
 Gitee Release assets are exactly:
 
@@ -1300,6 +1387,7 @@ install/linux.sh
 update/linux.sh
 install/macos.sh
 update/macos.sh
+install/linux-image.sh
 ```
 
 ### 6.2 Upstream Artifact Sources
@@ -1383,13 +1471,13 @@ Git operations use remote URL `https://gitee.com/<gitee.owner>/<gitee.repo>.git`
 
 1. Load and validate `.yaoe/yaoe.toml`.
 2. Ensure the Gitee delivery repository exists.
-3. Render four service scripts to `.yaoe/work/delivery/gitee-repo/install/` and `.yaoe/work/delivery/gitee-repo/update/`.
+3. Render five bootstrap scripts to `.yaoe/work/delivery/gitee-repo/install/` and `.yaoe/work/delivery/gitee-repo/update/`.
 4. Ensure branch `main` exists.
 5. For each repository raw file in section 6.1, compare rendered bytes to `.yaoe/cache/published/gitee-repo/main/<path>.last` when the file exists and the repository and branch were not just created.
 6. Skip remote lookup and upload for a file when the local `.last` bytes are identical to rendered bytes.
 7. For every remaining file, compare rendered bytes to the current remote branch bytes from fetched `origin/main` when the remote file exists.
 8. When remote bytes equal rendered bytes, atomically replace the corresponding `.last` file with the rendered bytes and skip upload.
-9. Commit and push every changed rendered file to branch `main` with message `yaoe v0.0.1 service scripts`.
+9. Commit and push every changed rendered file to branch `main` with message `yaoe v0.0.1 bootstrap scripts`.
 10. After a successful push, atomically replace the corresponding `.last` files with the rendered bytes.
 
 ### 6.7 R2 Delivery Surface
@@ -1568,29 +1656,64 @@ The embedded `install.sh` performs this exact sequence:
 
 ### 8.1 Public Entrypoints
 
-The only command that prints client-facing entrypoints is:
+The only command family that prints client-facing entrypoints is:
+
+```bash
+yaoe client [--all|--gui|--mobile|--linux|--macos|--image]
+```
+
+The default command prints the concise human-device entrypoints:
 
 ```bash
 yaoe client
 ```
 
-The command prints:
+The selector commands print exactly one client kind group:
 
-1. One Clash Verge Rev remote-profile URL.
-2. One Clash Verge Rev URL Scheme import URL.
-3. Two mobile sing-box Remote Profile URLs.
-4. Four Linux/macOS sing-box service script commands.
+```bash
+yaoe client --gui
+yaoe client --mobile
+yaoe client --linux
+yaoe client --macos
+yaoe client --image
+yaoe client --all
+```
 
-The only environment variable consumed by Linux/macOS service scripts is:
+Entrypoint groups are exact:
+
+| Selector   | Client kind output                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------- |
+| default    | Clash Verge Rev remote profile and import URL, iOS Remote Profile URL, Android Remote Profile URL |
+| `--gui`    | Clash Verge Rev remote profile and import URL                                                     |
+| `--mobile` | iOS and Android Remote Profile URLs                                                               |
+| `--linux`  | Linux runtime systemd service install and update commands                                         |
+| `--macos`  | macOS runtime launchd service install and update commands                                         |
+| `--image`  | Linux image install commands for amd64 and arm64                                                  |
+| `--all`    | Every entrypoint group in registry order                                                          |
+
+Runtime service scripts consume this environment variable:
 
 ```text
 YAOE_CONFIG_KEY
+```
+
+Linux image scripts consume these environment variables:
+
+```text
+YAOE_CONFIG_KEY
+YAOE_IMAGE_ARCH
 ```
 
 `YAOE_CONFIG_KEY` matches:
 
 ```text
 ^[A-Za-z0-9_-]{128}$
+```
+
+`YAOE_IMAGE_ARCH` matches:
+
+```text
+^(amd64|arm64)$
 ```
 
 ### 8.2 Clash Verge Rev GUI Profile Delivery
@@ -1801,6 +1924,51 @@ The macOS update script performs this exact sequence:
 19. Runs diagnostic IPv4 HTTPS smoke probes with `curl` against `https://www.google.com/generate_204`, `https://www.gstatic.com/generate_204`, `https://github.com`, and `https://api.github.com/rate_limit`, logging each attempt with URL, curl exit code, HTTP status, and expected status.
 20. Treats public smoke probe success as `smoke_probe=ok`; when all public probes fail but the service is running, emits a warning and continues with `smoke_probe=warning`.
 21. Emits final success log `yaoe: YAOE sing-box macos update completed: service=running smoke_probe=<ok|warning>`.
+
+### 8.8 Linux Image Install Script
+
+The Linux image install script is the public bootstrap path for Linux image/rootfs builders:
+
+```text
+install/linux-image.sh
+```
+
+The image builder enters the target Linux root filesystem before invoking the script. The script stages artifacts into the current root filesystem. It does not accept command-line flags.
+
+Linux image artifact paths are the same paths used by the runtime Linux service client:
+
+```text
+/usr/local/libexec/yaoe/sing-box
+/etc/yaoe-sing-box/config.json
+/etc/systemd/system/yaoe-sing-box.service
+/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service
+```
+
+The Linux image install script performs this exact sequence:
+
+1. Emits `yaoe: starting YAOE sing-box linux image install`.
+2. Requires `uname -s` to be `Linux`.
+3. Requires effective uid `0`.
+4. Requires `YAOE_CONFIG_KEY` to match section 8.1, then logs that only the key shape was validated.
+5. Requires `YAOE_IMAGE_ARCH` to match section 8.1.
+6. Maps `YAOE_IMAGE_ARCH=amd64` to `variant=linux-amd64` and `runtime_asset=sing-box-1.13.13-linux-amd64.tar.gz`.
+7. Maps `YAOE_IMAGE_ARCH=arm64` to `variant=linux-arm64` and `runtime_asset=sing-box-1.13.13-linux-arm64.tar.gz`.
+8. Logs the selected image architecture and variant.
+9. Creates `/usr/local/libexec/yaoe` with mode `0755`.
+10. Creates `/etc/yaoe-sing-box` with mode `0755`.
+11. Creates `/etc/systemd/system` with mode `0755`.
+12. Creates `/etc/systemd/system/multi-user.target.wants` with mode `0755`.
+13. Downloads the selected runtime asset from the Gitee Release asset URL embedded in the rendered script and logs start/completion.
+14. Extracts the sing-box executable to a temporary directory.
+15. Installs the executable to `/usr/local/libexec/yaoe/sing-box` with mode `0755`.
+16. Constructs `https://<cloudflare.delivery_domain>/config/$YAOE_CONFIG_KEY/$variant.json` without logging the full URL.
+17. Downloads the config to `/etc/yaoe-sing-box/config.json.pending` and logs start/completion without exposing `YAOE_CONFIG_KEY`.
+18. Atomically replaces `/etc/yaoe-sing-box/config.json` with the pending config.
+19. Renders `/etc/systemd/system/yaoe-sing-box.service` with the Linux systemd unit from section 8.4.
+20. Replaces `/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service` with a symbolic link to `../yaoe-sing-box.service`.
+21. Emits final success log `yaoe: YAOE sing-box linux image install completed: service=enabled`.
+
+This image script is a file-staging and boot-enablement script. Its command sequence contains no `systemctl`, `launchctl`, `service`, background process start, service-state check, runtime smoke probe, or execution of `/usr/local/libexec/yaoe/sing-box`.
 
 ## 9. Generated Client Configs
 
@@ -2483,19 +2651,20 @@ The non-acceptance functional suite validates behavior that changes generated ar
 
 1. `.yaoe/yaoe.toml` parsing, defaults, normalization, validation, placeholder rejection, and derived-value rejection.
 2. Credential generation, Reality public key derivation, and rotate-command atomic TOML edits.
-3. Platform registry contents: four service variants, two mobile variants, one GUI variant, four service scripts, six Gitee Release assets, and seven R2 config objects.
-4. `yaoe client` stdout exact block order and exact URL construction.
+3. Platform registry contents: four service variants, two image variants, two mobile variants, one GUI variant, five bootstrap scripts, six Gitee Release assets, and seven R2 config objects.
+4. `yaoe client` selector parsing, selector-specific validation, stdout exact block order, default concise output, `--all` output, and exact URL construction.
 5. CN direct SRS fetch, local validation, cache reuse, and Gitee Release publication planning.
 6. Generated `clash-verge.yaml` validation with mihomo `1.19.27` and exact coverage of NetBird fake-IP exemptions, direct DNS policy, fallback-over-PROXY, TUN route exclusions, geodata, VLESS Reality nodes, URLTest group, and fixed route rule order.
 7. Generated sing-box configs validation with sing-box `1.13.13` and exact coverage of DoH DNS servers, NetBird DNS/direct/TUN exclusions, DNS hijack, IPv4-only DNS, public IPv6 rejection, CN direct SRS, URLTest, and VLESS Reality outbounds without a sing-box `network` key.
-8. Linux service script behavior: OS, privilege, config key, CPU detection, runtime download, config download, config check, systemd unit install, service start, service status.
-9. macOS service script behavior: OS, privilege, config key, CPU detection, runtime download, config download, config check, launchd plist install, service start, service status.
-10. Managed server config rendering, package assembly, target installer checks, and apply workflow.
-11. `yaoe status` SSH command construction, systemd checks, version check, config check, listen check, stdout summary, and stderr grammar.
-12. `yaoe health` local sing-box version check, remote status prerequisites, health probe config rendering, local mixed inbound startup, curl SOCKS5 remote hostname resolution, HTTP `204` success output, and probe shutdown.
-13. Provider-secret redaction and delivery-credential stdout placement.
-14. Exit-code mapping by failing product boundary.
-15. ANSI color policy.
+8. Linux runtime service script behavior: OS, privilege, config key, CPU detection, runtime download, config download, config check, systemd unit install, service start, service status, and smoke-probe logging.
+9. Linux image script behavior: Linux process OS check, root check, config key check, image architecture check, runtime download, config download, file staging, unit rendering, symlink enablement, and absence of runtime service-control commands.
+10. macOS runtime service script behavior: OS, privilege, config key, CPU detection, runtime download, config download, config check, launchd plist install, service start, service status, and smoke-probe logging.
+11. Managed server config rendering, package assembly, target installer checks, and apply workflow.
+12. `yaoe status` SSH command construction, systemd checks, version check, config check, listen check, stdout summary, and stderr grammar.
+13. `yaoe health` local sing-box version check, remote status prerequisites, health probe config rendering, local mixed inbound startup, curl SOCKS5 remote hostname resolution, HTTP `204` success output, and probe shutdown.
+14. Provider-secret redaction and delivery-credential stdout placement.
+15. Exit-code mapping by failing product boundary.
+16. ANSI color policy.
 
 ### 11.4 Real Acceptance Validation
 
@@ -2531,7 +2700,6 @@ yaoe publish delivery
 yaoe apply
 yaoe status
 yaoe health
-yaoe client
 ```
 
 Acceptance requires `.yaoe/yaoe.toml` to contain real provider credentials, real Gitee coordinates, real Cloudflare R2 coordinates, and at least one real managed Linux amd64 or arm64 server reachable over root SSH. Acceptance records command output only as nextest test output.
@@ -2552,21 +2720,40 @@ The README presents the first-time flow in this order:
 10. Run `yaoe apply`.
 11. Run `yaoe status`.
 12. Run `yaoe health`.
-13. Print all client entrypoints with:
+13. Print default GUI and mobile client entrypoints with:
 
 ```bash
 yaoe client
 ```
 
-14. State that Windows users install Clash Verge Rev and import the `clash-verge remote-profile` URL or `clash-verge import-url` printed by `yaoe client`.
-15. State that macOS users have two supported entrypoints printed by `yaoe client`: `clash-verge` GUI profile and `macos sing-box` service commands.
-16. State that Linux users have two supported entrypoints printed by `yaoe client`: `clash-verge` GUI profile and `linux sing-box` service commands.
-17. State that iOS / iPadOS users import the `ios remote-profile` URL from `yaoe client` into the official sing-box graphical client as a Remote Profile.
-18. State that Android users import the `android remote-profile` URL from `yaoe client` into the official sing-box graphical client as a Remote Profile.
-19. State that Linux and macOS service scripts detect CPU architecture and users pass no architecture parameters.
-20. State that generated configs implement IPv4 egress semantics: private/local traffic, NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured direct CIDRs, managed-server endpoint IPs, and CN allowlist traffic are direct; remaining public IPv4 traffic uses proxy aggregation.
-21. State that Clash Verge Rev users edit no rule files, merge files, script files, or subscription conversion settings.
-22. Run real acceptance validation through nextest commands in section 11.4.
+14. Print Linux runtime service entrypoints with:
+
+```bash
+yaoe client --linux
+```
+
+15. Print macOS runtime service entrypoints with:
+
+```bash
+yaoe client --macos
+```
+
+16. Print Linux image build entrypoints with:
+
+```bash
+yaoe client --image
+```
+
+17. State that Windows users install Clash Verge Rev and import the `clash-verge remote-profile` URL or `clash-verge import-url` printed by `yaoe client` or `yaoe client --gui`.
+18. State that macOS users use `yaoe client` for the GUI profile or `yaoe client --macos` for the launchd service commands.
+19. State that Linux users use `yaoe client` for the GUI profile, `yaoe client --linux` for runtime systemd service commands, or `yaoe client --image` for image/rootfs build commands.
+20. State that iOS / iPadOS users import the `ios remote-profile` URL from `yaoe client` or `yaoe client --mobile` into the official sing-box graphical client as a Remote Profile.
+21. State that Android users import the `android remote-profile` URL from `yaoe client` or `yaoe client --mobile` into the official sing-box graphical client as a Remote Profile.
+22. State that Linux and macOS runtime service scripts detect CPU architecture and users pass no architecture parameters.
+23. State that the Linux image script requires `YAOE_IMAGE_ARCH=amd64` or `YAOE_IMAGE_ARCH=arm64` because image architecture is a build input.
+24. State that generated configs implement IPv4 egress semantics: private/local traffic, NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured direct CIDRs, managed-server endpoint IPs, and CN allowlist traffic are direct; remaining public IPv4 traffic uses proxy aggregation.
+25. State that Clash Verge Rev users edit no rule files, merge files, script files, or subscription conversion settings.
+26. Run real acceptance validation through nextest commands in section 11.4.
 
 The README documents separated publication commands for diagnostics in this order:
 
@@ -2576,7 +2763,7 @@ yaoe publish runtime
 yaoe publish config
 ```
 
-The README documents that `yaoe client` is the only supported client-entrypoint derivation command.
+The README documents that `yaoe client [selector]` is the only supported client-entrypoint derivation command family.
 
 The README documents these rotation flows exactly:
 

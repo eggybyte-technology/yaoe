@@ -1,13 +1,16 @@
 use std::process::ExitCode;
 use std::{fs, path::Path};
 
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand};
 use yaoe_controller::{
     RuntimeDeps, cmd_apply, cmd_check, cmd_client, cmd_health, cmd_init, cmd_publish_bootstrap,
     cmd_publish_config, cmd_publish_delivery, cmd_publish_runtime, cmd_render_config,
     cmd_rotate_config_key, cmd_rotate_reality_keypair, cmd_rotate_vless_uuid, cmd_status,
 };
-use yaoe_home::{ExitCode as Yc, LogLevel, YaoeError, log_event, sanitize_external_text};
+use yaoe_home::{
+    ClientEntrypointSelector, ExitCode as Yc, LogLevel, YaoeError, log_event,
+    sanitize_external_text,
+};
 
 #[derive(Parser)]
 #[command(name = "yaoe", version, about = "YAOE egress controller")]
@@ -20,7 +23,7 @@ struct Cli {
 enum Commands {
     Init,
     Check,
-    Client,
+    Client(ClientArgs),
     Rotate {
         #[command(subcommand)]
         target: RotateCommands,
@@ -64,6 +67,47 @@ enum RotateCommands {
     RealityKeypair,
 }
 
+#[derive(Args)]
+#[command(group(
+    ArgGroup::new("selector")
+        .args(["all", "gui", "mobile", "linux", "macos", "image"])
+        .multiple(false)
+))]
+struct ClientArgs {
+    #[arg(long)]
+    all: bool,
+    #[arg(long)]
+    gui: bool,
+    #[arg(long)]
+    mobile: bool,
+    #[arg(long)]
+    linux: bool,
+    #[arg(long)]
+    macos: bool,
+    #[arg(long)]
+    image: bool,
+}
+
+impl ClientArgs {
+    fn selector(&self) -> ClientEntrypointSelector {
+        if self.all {
+            ClientEntrypointSelector::All
+        } else if self.gui {
+            ClientEntrypointSelector::Gui
+        } else if self.mobile {
+            ClientEntrypointSelector::Mobile
+        } else if self.linux {
+            ClientEntrypointSelector::Linux
+        } else if self.macos {
+            ClientEntrypointSelector::Macos
+        } else if self.image {
+            ClientEntrypointSelector::Image
+        } else {
+            ClientEntrypointSelector::Default
+        }
+    }
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::from(Yc::Success.as_i32() as u8),
@@ -87,7 +131,7 @@ fn run() -> Result<(), YaoeError> {
             cmd_init(None, &deps)?;
         }
         Commands::Check => cmd_check(None)?,
-        Commands::Client => cmd_client(None)?,
+        Commands::Client(args) => cmd_client(None, args.selector())?,
         Commands::Rotate { target } => match target {
             RotateCommands::ConfigKey => cmd_rotate_config_key(None)?,
             RotateCommands::VlessUuid => cmd_rotate_vless_uuid(None)?,

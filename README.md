@@ -34,6 +34,7 @@ Gitee Release attachments
 Gitee repository raw files
   -> Linux/macOS service install scripts
   -> Linux/macOS service update scripts
+  -> Linux image install script
 
 Cloudflare R2 public bucket
   -> clash-verge.yaml
@@ -59,11 +60,15 @@ https://<delivery-domain>/config/<config-key>/<profile-file>
 | Linux desktop GUI     | Clash Verge Rev importing `clash-verge.yaml`      |
 | macOS desktop service | YAOE-installed sing-box launchd service           |
 | Linux desktop service | YAOE-installed sing-box systemd service           |
+| Linux image build     | YAOE-staged sing-box systemd service              |
 | iOS / iPadOS          | Official sing-box graphical client Remote Profile |
 | Android               | Official sing-box graphical client Remote Profile |
 
 Linux and macOS service scripts detect CPU architecture. Users pass no
 architecture parameters.
+
+Linux image builds pass `YAOE_IMAGE_ARCH=amd64` or `YAOE_IMAGE_ARCH=arm64`
+because image architecture is a build input.
 
 ## Requirements
 
@@ -117,28 +122,43 @@ yaoe publish delivery
 yaoe apply
 yaoe status
 yaoe health
-yaoe client
 ```
 
-`yaoe client` is the only supported client-entrypoint derivation command.
+`yaoe client [selector]` is the only supported client-entrypoint derivation
+command family.
 
 ## Client Use
 
 Windows users install Clash Verge Rev and import the
 `clash-verge remote-profile` URL or `clash-verge import-url` printed by
-`yaoe client`.
+`yaoe client` or `yaoe client --gui`.
 
-macOS users have two supported entrypoints printed by `yaoe client`:
-`clash-verge` GUI profile and `macos sing-box` service commands.
+macOS users use `yaoe client` for the GUI profile or `yaoe client --macos`
+for the launchd service commands.
 
-Linux users have two supported entrypoints printed by `yaoe client`:
-`clash-verge` GUI profile and `linux sing-box` service commands.
+Linux users use `yaoe client` for the GUI profile or `yaoe client --linux`
+for the systemd service commands.
+
+The runtime service blocks are named `linux sing-box` and `macos sing-box`.
+
+Linux image builders use `yaoe client --image` for root filesystem staging
+commands. The image script stages files in the current root filesystem and
+does not start or probe the service.
 
 iOS / iPadOS users import the `ios remote-profile` URL from `yaoe client` into
 the official sing-box graphical client as a Remote Profile.
 
 Android users import the `android remote-profile` URL from `yaoe client` into
 the official sing-box graphical client as a Remote Profile.
+
+Examples:
+
+```bash
+yaoe client
+yaoe client --linux
+yaoe client --macos
+yaoe client --image
+```
 
 Generated configs implement IPv4 egress semantics: private/local traffic,
 NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured
@@ -235,6 +255,9 @@ cargo install --path crates/yaoe-cli --locked --force
 yaoe check
 yaoe render config
 yaoe client
+yaoe client --linux
+yaoe client --macos
+yaoe client --image
 ```
 
 When changing `flake.nix`, `flake.lock`, `rust-toolchain.toml`, or `.envrc`,
@@ -266,7 +289,6 @@ yaoe publish delivery
 yaoe apply
 yaoe status
 yaoe health
-yaoe client
 ```
 
 ## Version Pins

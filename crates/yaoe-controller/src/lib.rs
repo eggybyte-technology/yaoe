@@ -30,10 +30,11 @@ use yaoe_gitee::{
     ensure_repository, publish_bootstrap_files, publish_release_assets,
 };
 use yaoe_home::{
-    CLOUDFLARE_PUBLIC_FETCH_ATTEMPTS, CLOUDFLARE_PUBLIC_FETCH_INTERVAL_SECONDS, CONFIG_VARIANTS,
+    BOOTSTRAP_SCRIPT_PATHS, CLOUDFLARE_PUBLIC_FETCH_ATTEMPTS,
+    CLOUDFLARE_PUBLIC_FETCH_INTERVAL_SECONDS, CONFIG_VARIANTS, ClientEntrypointSelector,
     GITEE_BOOTSTRAP_BRANCH, HEALTH_PROBE_BIND_HOST, HEALTH_PROBE_CURL_PROXY_KIND,
-    HEALTH_PROBE_PORT_RETRY_LIMIT, HEALTH_PROBE_URL, HomePaths, R2_CUSTOM_DOMAIN_MIN_TLS,
-    R2_JSON_CONTENT_TYPE, R2_YAML_CONTENT_TYPE, SERVICE_SCRIPT_TARGETS, SING_BOX_VERSION,
+    HEALTH_PROBE_PORT_RETRY_LIMIT, HEALTH_PROBE_URL, HomePaths, IMAGE_ARCH_VALUES,
+    R2_CUSTOM_DOMAIN_MIN_TLS, R2_JSON_CONTENT_TYPE, R2_YAML_CONTENT_TYPE, SING_BOX_VERSION,
     YaoeError, YaoeResult, atomic_write, config_variant, ensure_home, init_home,
     managed_server_runtime_variant, resolve_home, script_extension, sha256_hex,
     sing_box_version_line, validate_home_layout,
@@ -125,12 +126,12 @@ pub fn cmd_check(home: Option<&Path>) -> YaoeResult<()> {
     Ok(())
 }
 
-pub fn cmd_client(home: Option<&Path>) -> YaoeResult<()> {
+pub fn cmd_client(home: Option<&Path>, selector: ClientEntrypointSelector) -> YaoeResult<()> {
     let paths = resolve_home(home);
     let text = fs::read_to_string(&paths.config)
         .map_err(|e| YaoeError::State(format!("failed to read {}: {e}", paths.config.display())))?;
-    let parts = parse_for_client_entrypoints(&text)?;
-    print!("{}", render_client_entrypoints(&parts));
+    let parts = parse_for_client_entrypoints(&text, selector)?;
+    print!("{}", render_client_entrypoints(&parts, selector));
     Ok(())
 }
 
@@ -1021,36 +1022,38 @@ fn health_probe_error(
 
 fn render_bootstrap_files(paths: &HomePaths, config: &Config) -> YaoeResult<Vec<BootstrapFile>> {
     let mut files = Vec::new();
-    for target in SERVICE_SCRIPT_TARGETS {
-        let install = render_install_script(config, target)?;
-        let ext = script_extension(target).ok_or_else(|| {
-            YaoeError::Internal(format!("unsupported service script target: {target}"))
+    for script_path in BOOTSTRAP_SCRIPT_PATHS {
+        let (kind, file_name) = script_path.split_once('/').ok_or_else(|| {
+            YaoeError::Internal(format!("invalid bootstrap script path: {script_path}"))
         })?;
-        let install_path = format!("install/{target}.{ext}");
+        let target = file_name.strip_suffix(".sh").ok_or_else(|| {
+            YaoeError::Internal(format!("invalid bootstrap script file: {script_path}"))
+        })?;
+        let ext = script_extension(target).ok_or_else(|| {
+            YaoeError::Internal(format!("unsupported bootstrap script target: {target}"))
+        })?;
+        if ext != "sh" {
+            return Err(YaoeError::Internal(format!(
+                "unexpected bootstrap script extension for {target}: {ext}"
+            )));
+        }
+        let rendered = match kind {
+            "install" => render_install_script(config, target)?,
+            "update" => render_update_script(config, target)?,
+            _ => {
+                return Err(YaoeError::Internal(format!(
+                    "unsupported bootstrap script kind: {kind}"
+                )));
+            }
+        };
         atomic_write(
-            &paths.bootstrap_script_path("install", target),
-            install.as_bytes(),
+            &paths.bootstrap_script_path(kind, target),
+            rendered.as_bytes(),
             0o644,
         )?;
         files.push(BootstrapFile {
-            path: install_path,
-            bytes: install.into_bytes(),
-        });
-    }
-    for target in SERVICE_SCRIPT_TARGETS {
-        let update = render_update_script(config, target)?;
-        let ext = script_extension(target).ok_or_else(|| {
-            YaoeError::Internal(format!("unsupported service script target: {target}"))
-        })?;
-        let update_path = format!("update/{target}.{ext}");
-        atomic_write(
-            &paths.bootstrap_script_path("update", target),
-            update.as_bytes(),
-            0o644,
-        )?;
-        files.push(BootstrapFile {
-            path: update_path,
-            bytes: update.into_bytes(),
+            path: script_path.to_string(),
+            bytes: rendered.into_bytes(),
         });
     }
     Ok(files)
@@ -1270,46 +1273,104 @@ fn validate_public_configs(
     )))
 }
 
-fn render_client_entrypoints(parts: &ClientEntrypointParts) -> String {
-    let config_url =
-        |variant: &str| public_config_url(&parts.delivery_domain, &parts.config_key, variant);
-    let gui_profile_url = config_url("clash-verge");
+fn render_client_entrypoints(
+    parts: &ClientEntrypointParts,
+    selector: ClientEntrypointSelector,
+) -> String {
+    let mut out = String::new();
+    match selector {
+        ClientEntrypointSelector::Default => {
+            push_gui_entrypoints(&mut out, parts);
+            push_mobile_entrypoints(&mut out, parts);
+        }
+        ClientEntrypointSelector::Gui => push_gui_entrypoints(&mut out, parts),
+        ClientEntrypointSelector::Mobile => push_mobile_entrypoints(&mut out, parts),
+        ClientEntrypointSelector::Linux => push_linux_service_entrypoints(&mut out, parts),
+        ClientEntrypointSelector::Macos => push_macos_service_entrypoints(&mut out, parts),
+        ClientEntrypointSelector::Image => push_linux_image_entrypoints(&mut out, parts),
+        ClientEntrypointSelector::All => {
+            push_gui_entrypoints(&mut out, parts);
+            push_mobile_entrypoints(&mut out, parts);
+            push_linux_service_entrypoints(&mut out, parts);
+            push_macos_service_entrypoints(&mut out, parts);
+            push_linux_image_entrypoints(&mut out, parts);
+        }
+    }
+    out
+}
+
+fn push_gui_entrypoints(out: &mut String, parts: &ClientEntrypointParts) {
+    let gui_profile_url = config_url(parts, "clash-verge");
     let import_url = format!(
         "clash://install-config?url={}",
         percent_encode_url(&gui_profile_url)
     );
-    let raw_url = |kind: &str, target: &str, ext: &str| {
-        format!(
-            "https://gitee.com/{}/{}/raw/{}/{}/{}.{}",
-            parts.gitee_owner, parts.gitee_repo, GITEE_BOOTSTRAP_BRANCH, kind, target, ext
-        )
-    };
-    format!(
-        "clash-verge remote-profile\n{}\n\n\
-clash-verge import-url\n{}\n\n\
-ios remote-profile\n{}\n\n\
-android remote-profile\n{}\n\n\
-linux sing-box install\nexport YAOE_CONFIG_KEY='{}'\n\
+    out.push_str(&format!(
+        "clash-verge remote-profile\n{gui_profile_url}\n\n\
+clash-verge import-url\n{import_url}\n\n"
+    ));
+}
+
+fn push_mobile_entrypoints(out: &mut String, parts: &ClientEntrypointParts) {
+    out.push_str(&format!(
+        "ios remote-profile\n{}\n\n\
+android remote-profile\n{}\n\n",
+        config_url(parts, "ios"),
+        config_url(parts, "android")
+    ));
+}
+
+fn push_linux_service_entrypoints(out: &mut String, parts: &ClientEntrypointParts) {
+    out.push_str(&format!(
+        "linux sing-box install\nexport YAOE_CONFIG_KEY='{}'\n\
 curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n\
 linux sing-box update\nexport YAOE_CONFIG_KEY='{}'\n\
-curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n\
-macos sing-box install\nexport YAOE_CONFIG_KEY='{}'\n\
+curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n",
+        parts.config_key,
+        raw_url(parts, "install", "linux", "sh"),
+        parts.config_key,
+        raw_url(parts, "update", "linux", "sh"),
+    ));
+}
+
+fn push_macos_service_entrypoints(out: &mut String, parts: &ClientEntrypointParts) {
+    out.push_str(&format!(
+        "macos sing-box install\nexport YAOE_CONFIG_KEY='{}'\n\
 curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n\n\
 macos sing-box update\nexport YAOE_CONFIG_KEY='{}'\n\
-curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n",
-        gui_profile_url,
-        import_url,
-        config_url("ios"),
-        config_url("android"),
+curl -fsSL {} \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n\n",
         parts.config_key,
-        raw_url("install", "linux", "sh"),
+        raw_url(parts, "install", "macos", "sh"),
         parts.config_key,
-        raw_url("update", "linux", "sh"),
-        parts.config_key,
-        raw_url("install", "macos", "sh"),
-        parts.config_key,
-        raw_url("update", "macos", "sh"),
-    )
+        raw_url(parts, "update", "macos", "sh"),
+    ));
+}
+
+fn push_linux_image_entrypoints(out: &mut String, parts: &ClientEntrypointParts) {
+    let image_script = raw_url(parts, "install", "linux-image", "sh");
+    for arch in IMAGE_ARCH_VALUES {
+        out.push_str(&format!(
+            "linux image install {arch}\nexport YAOE_CONFIG_KEY='{}'\n\
+curl -fsSL {image_script} \\\n  | env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" YAOE_IMAGE_ARCH={arch} bash\n\n",
+            parts.config_key,
+        ));
+    }
+}
+
+fn config_url(parts: &ClientEntrypointParts, variant: &str) -> String {
+    public_config_url(&parts.delivery_domain, &parts.config_key, variant)
+}
+
+fn raw_url(parts: &ClientEntrypointParts, kind: &str, target: &str, ext: &str) -> String {
+    let owner = parts
+        .gitee_owner
+        .as_deref()
+        .expect("selector requiring Gitee owner was not validated");
+    let repo = parts
+        .gitee_repo
+        .as_deref()
+        .expect("selector requiring Gitee repo was not validated");
+    format!("https://gitee.com/{owner}/{repo}/raw/{GITEE_BOOTSTRAP_BRANCH}/{kind}/{target}.{ext}")
 }
 
 fn percent_encode_url(url: &str) -> String {

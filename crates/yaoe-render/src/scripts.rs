@@ -1,14 +1,15 @@
 use yaoe_config::Config;
 use yaoe_home::{
     GITEE_BOOTSTRAP_BRANCH, GITEE_RELEASE_TAG, HEALTH_PROBE_REQUEST_TIMEOUT_SECONDS,
-    HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS, HEALTH_PROBE_URL, SING_BOX_VERSION, YaoeError, YaoeResult,
-    script_extension,
+    HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS, HEALTH_PROBE_URL, IMAGE_CLIENT_REGISTRY, SING_BOX_VERSION,
+    YaoeError, YaoeResult, script_extension,
 };
 
 pub fn render_install_script(config: &Config, target: &str) -> YaoeResult<String> {
     match target {
         "linux" => Ok(render_linux_script(config, true)),
         "macos" => Ok(render_macos_script(config, true)),
+        "linux-image" => Ok(render_linux_image_script(config)),
         _ => Err(YaoeError::Internal(format!(
             "unsupported service script target: {target}"
         ))),
@@ -43,6 +44,92 @@ fn release_base(config: &Config) -> String {
     format!(
         "https://gitee.com/{}/{}/releases/download/{}",
         config.gitee.owner, config.gitee.repo, GITEE_RELEASE_TAG
+    )
+}
+
+fn render_linux_image_script(config: &Config) -> String {
+    let config_base = config_base(config);
+    let release_base = release_base(config);
+    let amd64 = IMAGE_CLIENT_REGISTRY
+        .iter()
+        .find(|entry| entry.arch == "amd64")
+        .expect("amd64 image registry entry");
+    let arm64 = IMAGE_CLIENT_REGISTRY
+        .iter()
+        .find(|entry| entry.arch == "arm64")
+        .expect("arm64 image registry entry");
+    format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+log() {{ printf 'yaoe: %s\n' "$*" >&2; }}
+fail() {{ log "ERROR: $*"; exit 1; }}
+download() {{
+  log "downloading $1 to $3"
+  curl --connect-timeout 10 --max-time 90 -fsSL "$2" -o "$3" || fail "$1 download failed"
+  log "downloaded $1"
+}}
+log "starting YAOE sing-box linux image install"
+[ "$(uname -s)" = "Linux" ] || fail "Linux required"
+[ "$(id -u)" = "0" ] || fail "root required"
+case "${{YAOE_CONFIG_KEY:-}}" in (*[!A-Za-z0-9_-]*|'') fail "YAOE_CONFIG_KEY has invalid shape" ;; esac
+[ "${{#YAOE_CONFIG_KEY}}" = "128" ] || fail "YAOE_CONFIG_KEY has invalid length"
+log "validated root privileges and config key shape"
+case "${{YAOE_IMAGE_ARCH:-}}" in
+  amd64) arch="amd64"; variant="{amd64_variant}"; runtime_asset="{amd64_asset}" ;;
+  arm64) arch="arm64"; variant="{arm64_variant}"; runtime_asset="{arm64_asset}" ;;
+  *) fail "YAOE_IMAGE_ARCH must be amd64 or arm64" ;;
+esac
+log "selected linux image arch=$arch variant=$variant"
+log "creating image install directories"
+install -d -m 0755 /usr/local/libexec/yaoe
+install -d -m 0755 /etc/yaoe-sing-box
+install -d -m 0755 /etc/systemd/system
+install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+archive_url="{release_base}/$runtime_asset"
+log "downloading sing-box runtime for $variant"
+download "sing-box archive" "$archive_url" "$tmp/sing-box.tar.gz"
+log "extracting sing-box runtime"
+tar -xzf "$tmp/sing-box.tar.gz" -C "$tmp"
+bin="$(find "$tmp" -type f -name sing-box | head -n 1)"
+[ -n "$bin" ] || fail "sing-box not found in archive"
+log "installing sing-box executable to /usr/local/libexec/yaoe/sing-box"
+install -m 0755 "$bin" /usr/local/libexec/yaoe/sing-box
+config_url="{config_base}/config/$YAOE_CONFIG_KEY/$variant.json"
+log "downloading platform config for $variant"
+download "platform config" "$config_url" /etc/yaoe-sing-box/config.json.pending
+log "activating staged config"
+mv -f /etc/yaoe-sing-box/config.json.pending /etc/yaoe-sing-box/config.json
+log "rendering systemd unit /etc/systemd/system/yaoe-sing-box.service"
+cat > /etc/systemd/system/yaoe-sing-box.service <<'UNIT'
+[Unit]
+Description=YAOE sing-box client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/libexec/yaoe/sing-box run -c /etc/yaoe-sing-box/config.json
+Restart=always
+RestartSec=5
+WorkingDirectory=/usr/local/libexec/yaoe
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+log "enabling yaoe-sing-box.service by symlink"
+rm -f /etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service
+ln -s ../yaoe-sing-box.service /etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service
+log "YAOE sing-box linux image install completed: service=enabled"
+"#,
+        amd64_variant = amd64.config_variant,
+        amd64_asset = amd64.public_runtime_asset,
+        arm64_variant = arm64.config_variant,
+        arm64_asset = arm64.public_runtime_asset,
     )
 }
 

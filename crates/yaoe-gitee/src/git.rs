@@ -160,7 +160,7 @@ fn ensure_branch(
                     "user.email=yaoe@example.invalid",
                     "commit",
                     "-m",
-                    "yaoe v0.0.1 service scripts",
+                    "yaoe v0.0.1 bootstrap scripts",
                 ],
             )?;
             git(

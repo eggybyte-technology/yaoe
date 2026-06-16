@@ -11,7 +11,6 @@ fn acceptance_delivery() {
         &["apply"],
         &["status"],
         &["health"],
-        &["client"],
     ] {
         run(&repo, "yaoe", args);
     }

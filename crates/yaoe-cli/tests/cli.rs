@@ -66,28 +66,73 @@ fn rejects_removed_commands_with_code_2() {
     }
 }
 
+fn partial_client_config(include_gitee: bool) -> String {
+    let key = "A".repeat(128);
+    let gitee = if include_gitee {
+        r#"
+[gitee]
+owner = "owner"
+repo = "repo"
+"#
+    } else {
+        ""
+    };
+    format!(
+        r#"[cloudflare]
+delivery_domain = "cfg.test.net"
+{gitee}
+[credential]
+config_key = "{key}"
+"#
+    )
+}
+
+fn client_expected(selector: &str, key: &str) -> String {
+    let gui = format!(
+        "clash-verge remote-profile\nhttps://cfg.test.net/config/{key}/clash-verge.yaml\n\n\
+clash-verge import-url\nclash://install-config?url=https%3A%2F%2Fcfg.test.net%2Fconfig%2F{key}%2Fclash-verge.yaml\n\n"
+    );
+    let mobile = format!(
+        "ios remote-profile\nhttps://cfg.test.net/config/{key}/ios.json\n\n\
+android remote-profile\nhttps://cfg.test.net/config/{key}/android.json\n\n"
+    );
+    let linux = format!(
+        "linux sing-box install\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/install/linux.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n\
+linux sing-box update\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/update/linux.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n"
+    );
+    let macos = format!(
+        "macos sing-box install\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/install/macos.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n\n\
+macos sing-box update\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/update/macos.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n\n"
+    );
+    let image = format!(
+        "linux image install amd64\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/install/linux-image.sh \\\n  | env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" YAOE_IMAGE_ARCH=amd64 bash\n\n\
+linux image install arm64\nexport YAOE_CONFIG_KEY='{key}'\n\
+curl -fsSL https://gitee.com/owner/repo/raw/main/install/linux-image.sh \\\n  | env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" YAOE_IMAGE_ARCH=arm64 bash\n\n"
+    );
+    match selector {
+        "default" => format!("{gui}{mobile}"),
+        "gui" => gui,
+        "mobile" => mobile,
+        "linux" => linux,
+        "macos" => macos,
+        "image" => image,
+        "all" => format!("{gui}{mobile}{linux}{macos}{image}"),
+        _ => panic!("unknown selector {selector}"),
+    }
+}
+
 #[test]
-fn client_prints_exact_entrypoint_block() {
+fn client_default_prints_only_gui_and_mobile_blocks_without_gitee() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join(".yaoe");
     fs::create_dir(&home).unwrap();
     let key = "A".repeat(128);
-    fs::write(
-        home.join("yaoe.toml"),
-        format!(
-            r#"[cloudflare]
-delivery_domain = "cfg.test.net"
-
-[gitee]
-owner = "owner"
-repo = "repo"
-
-[credential]
-config_key = "{key}"
-"#
-        ),
-    )
-    .unwrap();
+    fs::write(home.join("yaoe.toml"), partial_client_config(false)).unwrap();
 
     Command::cargo_bin("yaoe")
         .unwrap()
@@ -95,48 +140,64 @@ config_key = "{key}"
         .arg("client")
         .assert()
         .success()
-        .stdout(format!(
-            "clash-verge remote-profile\nhttps://cfg.test.net/config/{key}/clash-verge.yaml\n\n\
-clash-verge import-url\nclash://install-config?url=https%3A%2F%2Fcfg.test.net%2Fconfig%2F{key}%2Fclash-verge.yaml\n\n\
-ios remote-profile\nhttps://cfg.test.net/config/{key}/ios.json\n\n\
-android remote-profile\nhttps://cfg.test.net/config/{key}/android.json\n\n\
-linux sing-box install\nexport YAOE_CONFIG_KEY='{key}'\n\
-curl -fsSL https://gitee.com/owner/repo/raw/main/install/linux.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n\
-linux sing-box update\nexport YAOE_CONFIG_KEY='{key}'\n\
-curl -fsSL https://gitee.com/owner/repo/raw/main/update/linux.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" bash\n\n\
-macos sing-box install\nexport YAOE_CONFIG_KEY='{key}'\n\
-curl -fsSL https://gitee.com/owner/repo/raw/main/install/macos.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n\n\
-macos sing-box update\nexport YAOE_CONFIG_KEY='{key}'\n\
-curl -fsSL https://gitee.com/owner/repo/raw/main/update/macos.sh \\\n  | sudo env YAOE_CONFIG_KEY=\"$YAOE_CONFIG_KEY\" /bin/bash\n"
-        ))
+        .stdout(client_expected("default", &key))
         .stderr("");
 }
 
 #[test]
-fn client_requires_gitee_coordinates_with_code_3() {
+fn client_selector_prints_exact_block_sequences() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join(".yaoe");
     fs::create_dir(&home).unwrap();
-    fs::write(
-        home.join("yaoe.toml"),
-        format!(
-            r#"[cloudflare]
-delivery_domain = "cfg.test.net"
+    fs::write(home.join("yaoe.toml"), partial_client_config(true)).unwrap();
+    let key = "A".repeat(128);
 
-[credential]
-config_key = "{}"
-"#,
-            "A".repeat(128)
-        ),
-    )
-    .unwrap();
+    for selector in ["gui", "mobile", "linux", "macos", "image", "all"] {
+        Command::cargo_bin("yaoe")
+            .unwrap()
+            .current_dir(dir.path())
+            .args(["client", &format!("--{selector}")])
+            .assert()
+            .success()
+            .stdout(client_expected(selector, &key))
+            .stderr("");
+    }
+}
 
+#[test]
+fn client_rejects_multiple_selectors_with_code_2() {
     Command::cargo_bin("yaoe")
         .unwrap()
-        .current_dir(dir.path())
-        .arg("client")
+        .args(["client", "--linux", "--macos"])
         .assert()
-        .code(3);
+        .code(2);
+}
+
+#[test]
+fn client_requires_gitee_coordinates_only_for_service_and_image_selectors() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join(".yaoe");
+    fs::create_dir(&home).unwrap();
+    fs::write(home.join("yaoe.toml"), partial_client_config(false)).unwrap();
+
+    for selector in ["gui", "mobile"] {
+        Command::cargo_bin("yaoe")
+            .unwrap()
+            .current_dir(dir.path())
+            .args(["client", &format!("--{selector}")])
+            .assert()
+            .success();
+    }
+
+    for selector in ["linux", "macos", "image", "all"] {
+        Command::cargo_bin("yaoe")
+            .unwrap()
+            .current_dir(dir.path())
+            .args(["client", &format!("--{selector}")])
+            .assert()
+            .code(3)
+            .stderr(predicate::str::contains("gitee"));
+    }
 }
 
 #[test]

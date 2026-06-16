@@ -12,10 +12,10 @@ use serde::Deserialize;
 use uuid::Uuid;
 use x25519_dalek::{PublicKey, StaticSecret};
 use yaoe_home::{
-    BUILTIN_DIRECT_IPV4_CIDRS, CONFIG_KEY_LENGTH, CONFIG_KEY_RANDOM_BYTES, NETBIRD_DIRECT_CIDR,
-    REALITY_PRIVATE_KEY_LENGTH, REALITY_PUBLIC_KEY_LENGTH, REALITY_SHORT_ID_BYTES,
-    REALITY_SHORT_ID_HEX_LENGTH, SERVER_PORT_MAX, SERVER_PORT_MIN, YaoeError, YaoeResult,
-    atomic_write,
+    BUILTIN_DIRECT_IPV4_CIDRS, CONFIG_KEY_LENGTH, CONFIG_KEY_RANDOM_BYTES,
+    ClientEntrypointSelector, NETBIRD_DIRECT_CIDR, REALITY_PRIVATE_KEY_LENGTH,
+    REALITY_PUBLIC_KEY_LENGTH, REALITY_SHORT_ID_BYTES, REALITY_SHORT_ID_HEX_LENGTH,
+    SERVER_PORT_MAX, SERVER_PORT_MIN, YaoeError, YaoeResult, atomic_write,
 };
 
 use crate::model::{Config, ServerConfig};
@@ -48,7 +48,10 @@ pub fn load_and_validate(path: &Path) -> YaoeResult<Config> {
     parse_and_validate(&text)
 }
 
-pub fn parse_for_client_entrypoints(text: &str) -> YaoeResult<ClientEntrypointParts> {
+pub fn parse_for_client_entrypoints(
+    text: &str,
+    selector: ClientEntrypointSelector,
+) -> YaoeResult<ClientEntrypointParts> {
     reject_unknown_root_keys(text)?;
     reject_forbidden_surfaces(text)?;
     let partial: PartialConfig =
@@ -85,27 +88,32 @@ pub fn parse_for_client_entrypoints(text: &str) -> YaoeResult<ClientEntrypointPa
         ));
     }
 
-    let gitee = partial
-        .gitee
-        .ok_or_else(|| YaoeError::Config("[gitee].owner and [gitee].repo are required".into()))?;
-    let gitee_owner = gitee
-        .owner
-        .ok_or_else(|| YaoeError::Config("[gitee].owner is required".into()))?;
-    let gitee_repo = gitee
-        .repo
-        .ok_or_else(|| YaoeError::Config("[gitee].repo is required".into()))?;
-    validate_identifier("gitee.owner", &gitee_owner)?;
-    validate_identifier("gitee.repo", &gitee_repo)?;
-    if is_placeholder(&gitee_owner) {
-        return Err(YaoeError::Config(
-            "gitee.owner contains a placeholder value".into(),
-        ));
-    }
-    if is_placeholder(&gitee_repo) {
-        return Err(YaoeError::Config(
-            "gitee.repo contains a placeholder value".into(),
-        ));
-    }
+    let (gitee_owner, gitee_repo) = if selector.requires_gitee() {
+        let gitee = partial.gitee.ok_or_else(|| {
+            YaoeError::Config("[gitee].owner and [gitee].repo are required".into())
+        })?;
+        let gitee_owner = gitee
+            .owner
+            .ok_or_else(|| YaoeError::Config("[gitee].owner is required".into()))?;
+        let gitee_repo = gitee
+            .repo
+            .ok_or_else(|| YaoeError::Config("[gitee].repo is required".into()))?;
+        validate_identifier("gitee.owner", &gitee_owner)?;
+        validate_identifier("gitee.repo", &gitee_repo)?;
+        if is_placeholder(&gitee_owner) {
+            return Err(YaoeError::Config(
+                "gitee.owner contains a placeholder value".into(),
+            ));
+        }
+        if is_placeholder(&gitee_repo) {
+            return Err(YaoeError::Config(
+                "gitee.repo contains a placeholder value".into(),
+            ));
+        }
+        (Some(gitee_owner), Some(gitee_repo))
+    } else {
+        (None, None)
+    };
 
     Ok(ClientEntrypointParts {
         delivery_domain,
@@ -141,8 +149,8 @@ fn reject_unknown_root_keys(text: &str) -> YaoeResult<()> {
 pub struct ClientEntrypointParts {
     pub delivery_domain: String,
     pub config_key: String,
-    pub gitee_owner: String,
-    pub gitee_repo: String,
+    pub gitee_owner: Option<String>,
+    pub gitee_repo: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -878,7 +886,7 @@ port = 28443
     }
 
     #[test]
-    fn client_entrypoint_profile_requires_gitee_coordinates() {
+    fn client_entrypoint_profile_validation_is_selector_specific() {
         let key = "A".repeat(CONFIG_KEY_LENGTH);
         let text = format!(
             r#"[cloudflare]
@@ -888,7 +896,21 @@ delivery_domain = "cfg.test.net"
 config_key = "{key}"
 "#
         );
-        let err = parse_for_client_entrypoints(&text).unwrap_err().to_string();
+        let parts = parse_for_client_entrypoints(&text, ClientEntrypointSelector::Default).unwrap();
+        assert_eq!(parts.delivery_domain, "cfg.test.net");
+        assert_eq!(parts.config_key, key);
+        assert!(parts.gitee_owner.is_none());
+        assert!(parts.gitee_repo.is_none());
+
+        let parts = parse_for_client_entrypoints(&text, ClientEntrypointSelector::Gui).unwrap();
+        assert!(parts.gitee_owner.is_none());
+
+        let parts = parse_for_client_entrypoints(&text, ClientEntrypointSelector::Mobile).unwrap();
+        assert!(parts.gitee_owner.is_none());
+
+        let err = parse_for_client_entrypoints(&text, ClientEntrypointSelector::Linux)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("gitee"));
 
         let text = format!(
@@ -903,9 +925,16 @@ repo = "repo"
 config_key = "{key}"
 "#
         );
-        let parts = parse_for_client_entrypoints(&text).unwrap();
-        assert_eq!(parts.gitee_owner, "owner");
-        assert_eq!(parts.gitee_repo, "repo");
+        for selector in [
+            ClientEntrypointSelector::Linux,
+            ClientEntrypointSelector::Macos,
+            ClientEntrypointSelector::Image,
+            ClientEntrypointSelector::All,
+        ] {
+            let parts = parse_for_client_entrypoints(&text, selector).unwrap();
+            assert_eq!(parts.gitee_owner.as_deref(), Some("owner"));
+            assert_eq!(parts.gitee_repo.as_deref(), Some("repo"));
+        }
     }
 
     #[test]

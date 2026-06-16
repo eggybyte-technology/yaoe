@@ -12,7 +12,7 @@ use yaoe_controller::{
     cmd_publish_config, cmd_publish_runtime, cmd_render_config, cmd_status,
 };
 use yaoe_gitee::{BootstrapFile, GitPublisher, GiteeApi, Release};
-use yaoe_home::{YaoeError, YaoeResult};
+use yaoe_home::{ClientEntrypointSelector, YaoeError, YaoeResult};
 use yaoe_render::{
     ClientPlatform, ClientRenderInput, HealthProbeRenderInput, ServerRenderInput,
     render_clash_verge_profile, render_client_config, render_health_probe_config,
@@ -398,7 +398,7 @@ config_key = "{}"
         config_key()
     );
     fs::write(home.join("yaoe.toml"), partial).unwrap();
-    cmd_client(Some(&home)).unwrap();
+    cmd_client(Some(&home), ClientEntrypointSelector::Default).unwrap();
 }
 
 #[test]
@@ -477,13 +477,21 @@ fn scripts_construct_config_url_from_env_key() {
     let config = yaoe_config::parse_and_validate(&sample_config()).unwrap();
     let install = render_install_script(&config, "linux").unwrap();
     let update = render_update_script(&config, "macos").unwrap();
+    let image = render_install_script(&config, "linux-image").unwrap();
     assert!(install.contains("variant=\"linux-$arch\""));
     assert!(install.contains("/config/$YAOE_CONFIG_KEY/$variant.json"));
     assert!(install.contains("aarch64|arm64) arch=\"arm64\""));
     assert!(update.contains("variant=\"macos-$arch\""));
     assert!(update.contains("/config/$YAOE_CONFIG_KEY/$variant.json"));
     assert!(update.contains("arm64) arch=\"arm64\""));
+    assert!(image.contains("YAOE_IMAGE_ARCH"));
+    assert!(image.contains("amd64) arch=\"amd64\"; variant=\"linux-amd64\""));
+    assert!(image.contains("arm64) arch=\"arm64\"; variant=\"linux-arm64\""));
+    assert!(image.contains("/config/$YAOE_CONFIG_KEY/$variant.json"));
+    assert!(image.contains("sing-box-1.13.13-linux-amd64.tar.gz"));
+    assert!(image.contains("sing-box-1.13.13-linux-arm64.tar.gz"));
     assert!(!install.contains(&config.credential.config_key));
+    assert!(!image.contains(&config.credential.config_key));
     for rendered in [
         install,
         update,
@@ -493,6 +501,48 @@ fn scripts_construct_config_url_from_env_key() {
         assert!(!rendered.contains("darwin-"));
         assert!(!rendered.contains("linux-amd64.sh"));
         assert!(!rendered.contains("macos-amd64.sh"));
+    }
+}
+
+#[test]
+fn linux_image_script_stages_files_and_has_no_runtime_service_control() {
+    let config = yaoe_config::parse_and_validate(&sample_config()).unwrap();
+    let image = render_install_script(&config, "linux-image").unwrap();
+
+    assert!(image.contains("starting YAOE sing-box linux image install"));
+    assert!(image.contains("[ \"$(uname -s)\" = \"Linux\" ]"));
+    assert!(image.contains("[ \"$(id -u)\" = \"0\" ]"));
+    assert!(image.contains("YAOE_CONFIG_KEY has invalid shape"));
+    assert!(image.contains("YAOE_CONFIG_KEY has invalid length"));
+    assert!(image.contains("YAOE_IMAGE_ARCH must be amd64 or arm64"));
+    assert!(image.contains("install -d -m 0755 /usr/local/libexec/yaoe"));
+    assert!(image.contains("install -d -m 0755 /etc/yaoe-sing-box"));
+    assert!(image.contains("install -d -m 0755 /etc/systemd/system"));
+    assert!(image.contains("install -d -m 0755 /etc/systemd/system/multi-user.target.wants"));
+    assert!(image.contains("install -m 0755 \"$bin\" /usr/local/libexec/yaoe/sing-box"));
+    assert!(
+        image.contains(
+            "mv -f /etc/yaoe-sing-box/config.json.pending /etc/yaoe-sing-box/config.json"
+        )
+    );
+    assert!(image.contains("cat > /etc/systemd/system/yaoe-sing-box.service <<'UNIT'"));
+    assert!(image.contains("ln -s ../yaoe-sing-box.service /etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service"));
+    assert!(image.contains("YAOE sing-box linux image install completed: service=enabled"));
+
+    for forbidden in [
+        "systemctl",
+        "launchctl",
+        "\nservice ",
+        "smoke_probe",
+        "is-active",
+        "kickstart",
+        "/usr/local/libexec/yaoe/sing-box version",
+        "/usr/local/libexec/yaoe/sing-box check",
+    ] {
+        assert!(
+            !image.contains(forbidden),
+            "linux image script contains forbidden runtime behavior: {forbidden}"
+        );
     }
 }
 
@@ -560,10 +610,10 @@ fn publish_bootstrap_uses_git_publish_path() {
 
     let calls = calls.snapshot();
     assert!(calls.iter().any(|call| call == "gitee.ensure_repository"));
-    assert!(calls.iter().any(|call| call == "git.baseline:4"));
-    assert!(calls.iter().any(|call| call == "git.publish:4"));
+    assert!(calls.iter().any(|call| call == "git.baseline:5"));
+    assert!(calls.iter().any(|call| call == "git.publish:5"));
     assert!(calls.iter().any(|call| {
-        call == "git.publish.paths:install/linux.sh,install/macos.sh,update/linux.sh,update/macos.sh"
+        call == "git.publish.paths:install/linux.sh,update/linux.sh,install/macos.sh,update/macos.sh,install/linux-image.sh"
     }));
 }
 
@@ -582,7 +632,7 @@ fn publish_runtime_only_ensures_bootstrap_baseline_before_release_assets() {
         .expect("runtime ensures repository");
     let baseline = calls
         .iter()
-        .position(|call| call == "git.baseline:4")
+        .position(|call| call == "git.baseline:5")
         .expect("runtime ensures bootstrap baseline");
     let release = calls
         .iter()
@@ -885,6 +935,9 @@ fn readme_documents_os_level_client_blocks_and_ipv6_containment() {
     assert!(readme.contains("linux sing-box"));
     assert!(readme.contains("Clash Verge Rev"));
     assert!(readme.contains("macos sing-box"));
+    assert!(readme.contains("Linux image builders use `yaoe client --image`"));
+    assert!(readme.contains("YAOE_IMAGE_ARCH=amd64"));
+    assert!(readme.contains("YAOE_IMAGE_ARCH=arm64"));
     assert!(readme.contains("Generated configs implement IPv4 egress semantics"));
     assert!(readme.contains("NetBird overlay traffic"));
     assert!(readme.contains("NetBird control/STUN/TURN/relay traffic"));
@@ -921,7 +974,15 @@ fn readme_first_time_flow_and_rotation_commands_match_contract() {
             "yaoe apply",
             "yaoe status",
             "yaoe health",
+        ],
+    );
+    assert_ordered(
+        &readme,
+        &[
             "yaoe client",
+            "yaoe client --linux",
+            "yaoe client --macos",
+            "yaoe client --image",
         ],
     );
     assert_ordered(

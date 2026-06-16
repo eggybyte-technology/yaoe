@@ -10,7 +10,26 @@ pub const CLASH_VERGE_REV_REFERENCE_DATE: &str = "2026-05-20";
 pub const CLASH_VERGE_MIHOMO_BASELINE_VERSION: &str = "1.19.25";
 pub const GITEE_BOOTSTRAP_BRANCH: &str = "main";
 pub const GITEE_RELEASE_TAG: &str = "yaoe-v0.0.1-sing-box-1.13.13";
+pub const CLIENT_ENTRYPOINT_SELECTORS: [&str; 7] =
+    ["default", "all", "gui", "mobile", "linux", "macos", "image"];
+pub const CLIENT_ENTRYPOINTS: [&str; 6] = [
+    "clash-verge",
+    "ios",
+    "android",
+    "linux-service",
+    "macos-service",
+    "linux-image",
+];
+pub const DEFAULT_CLIENT_ENTRYPOINTS: [&str; 3] = ["clash-verge", "ios", "android"];
 pub const SERVICE_SCRIPT_TARGETS: [&str; 2] = ["linux", "macos"];
+pub const IMAGE_SCRIPT_TARGETS: [&str; 1] = ["linux-image"];
+pub const BOOTSTRAP_SCRIPT_PATHS: [&str; 5] = [
+    "install/linux.sh",
+    "update/linux.sh",
+    "install/macos.sh",
+    "update/macos.sh",
+    "install/linux-image.sh",
+];
 pub const SERVICE_CONFIG_VARIANTS: [&str; 4] =
     ["linux-amd64", "linux-arm64", "macos-amd64", "macos-arm64"];
 pub const MOBILE_CONFIG_VARIANTS: [&str; 2] = ["ios", "android"];
@@ -24,6 +43,8 @@ pub const CONFIG_VARIANTS: [&str; 7] = [
     "ios",
     "android",
 ];
+pub const IMAGE_CONFIG_VARIANTS: [&str; 2] = ["linux-amd64", "linux-arm64"];
+pub const IMAGE_ARCH_VALUES: [&str; 2] = ["amd64", "arm64"];
 pub const MANAGED_SERVER_RUNTIME_VARIANTS: [&str; 2] = ["linux-amd64", "linux-arm64"];
 pub const CONFIG_KEY_RANDOM_BYTES: usize = 96;
 pub const CONFIG_KEY_LENGTH: usize = 128;
@@ -191,6 +212,35 @@ pub struct ConfigVariant {
     pub route_profile: &'static str,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientEntrypointSelector {
+    Default,
+    All,
+    Gui,
+    Mobile,
+    Linux,
+    Macos,
+    Image,
+}
+
+impl ClientEntrypointSelector {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::All => "all",
+            Self::Gui => "gui",
+            Self::Mobile => "mobile",
+            Self::Linux => "linux",
+            Self::Macos => "macos",
+            Self::Image => "image",
+        }
+    }
+
+    pub fn requires_gitee(self) -> bool {
+        matches!(self, Self::All | Self::Linux | Self::Macos | Self::Image)
+    }
+}
+
 pub const CONFIG_VARIANT_REGISTRY: [ConfigVariant; 7] = [
     ConfigVariant {
         id: "clash-verge",
@@ -271,6 +321,38 @@ pub const CONFIG_VARIANT_REGISTRY: [ConfigVariant; 7] = [
     },
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageClientVariant {
+    pub arch: &'static str,
+    pub config_variant: &'static str,
+    pub script_path: &'static str,
+    pub public_config_file: &'static str,
+    pub public_runtime_asset: &'static str,
+    pub system_service_unit: &'static str,
+    pub enablement_path: &'static str,
+}
+
+pub const IMAGE_CLIENT_REGISTRY: [ImageClientVariant; 2] = [
+    ImageClientVariant {
+        arch: "amd64",
+        config_variant: "linux-amd64",
+        script_path: "install/linux-image.sh",
+        public_config_file: "linux-amd64.json",
+        public_runtime_asset: "sing-box-1.13.13-linux-amd64.tar.gz",
+        system_service_unit: "yaoe-sing-box.service",
+        enablement_path: "/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service",
+    },
+    ImageClientVariant {
+        arch: "arm64",
+        config_variant: "linux-arm64",
+        script_path: "install/linux-image.sh",
+        public_config_file: "linux-arm64.json",
+        public_runtime_asset: "sing-box-1.13.13-linux-arm64.tar.gz",
+        system_service_unit: "yaoe-sing-box.service",
+        enablement_path: "/etc/systemd/system/multi-user.target.wants/yaoe-sing-box.service",
+    },
+];
+
 pub fn sing_box_version_line() -> String {
     format!("sing-box version {SING_BOX_VERSION}")
 }
@@ -320,13 +402,17 @@ pub fn upstream_sing_box_url(variant: &str) -> Option<String> {
 
 pub fn script_extension(target: &str) -> Option<&'static str> {
     match target {
-        "linux" | "macos" => Some("sh"),
+        "linux" | "macos" | "linux-image" => Some("sh"),
         _ => None,
     }
 }
 
 pub fn is_service_script_target(target: &str) -> bool {
     SERVICE_SCRIPT_TARGETS.contains(&target)
+}
+
+pub fn is_image_script_target(target: &str) -> bool {
+    IMAGE_SCRIPT_TARGETS.contains(&target)
 }
 
 pub fn is_config_variant(variant: &str) -> bool {
@@ -350,7 +436,37 @@ mod tests {
 
     #[test]
     fn platform_registry_matches_v0_0_1_contract() {
+        assert_eq!(
+            CLIENT_ENTRYPOINT_SELECTORS,
+            ["default", "all", "gui", "mobile", "linux", "macos", "image"]
+        );
+        assert_eq!(
+            CLIENT_ENTRYPOINTS,
+            [
+                "clash-verge",
+                "ios",
+                "android",
+                "linux-service",
+                "macos-service",
+                "linux-image"
+            ]
+        );
+        assert_eq!(
+            DEFAULT_CLIENT_ENTRYPOINTS,
+            ["clash-verge", "ios", "android"]
+        );
         assert_eq!(SERVICE_SCRIPT_TARGETS, ["linux", "macos"]);
+        assert_eq!(IMAGE_SCRIPT_TARGETS, ["linux-image"]);
+        assert_eq!(
+            BOOTSTRAP_SCRIPT_PATHS,
+            [
+                "install/linux.sh",
+                "update/linux.sh",
+                "install/macos.sh",
+                "update/macos.sh",
+                "install/linux-image.sh"
+            ]
+        );
         assert_eq!(
             SERVICE_CONFIG_VARIANTS,
             ["linux-amd64", "linux-arm64", "macos-amd64", "macos-arm64"]
@@ -358,6 +474,9 @@ mod tests {
         assert_eq!(MOBILE_CONFIG_VARIANTS, ["ios", "android"]);
         assert_eq!(GUI_CONFIG_VARIANTS, ["clash-verge"]);
         assert_eq!(CONFIG_VARIANTS.len(), 7);
+        assert_eq!(IMAGE_CONFIG_VARIANTS, ["linux-amd64", "linux-arm64"]);
+        assert_eq!(IMAGE_ARCH_VALUES, ["amd64", "arm64"]);
+        assert_eq!(script_extension("linux-image"), Some("sh"));
         assert_eq!(
             MANAGED_SERVER_RUNTIME_VARIANTS,
             ["linux-amd64", "linux-arm64"]
@@ -383,6 +502,34 @@ mod tests {
         assert_eq!(CN_IPV4_PUBLIC_ASSET, "cn-ipv4.srs");
         assert!(CN_DOMAIN_UPSTREAM_URL.contains("accelerated-domains.china.conf.srs"));
         assert!(CN_IPV4_UPSTREAM_URL.contains("chnroutes.txt.srs"));
+    }
+
+    #[test]
+    fn linux_image_client_registry_matches_contract() {
+        assert_eq!(
+            IMAGE_CLIENT_REGISTRY.map(|entry| entry.arch),
+            IMAGE_ARCH_VALUES
+        );
+        assert_eq!(
+            IMAGE_CLIENT_REGISTRY.map(|entry| entry.config_variant),
+            IMAGE_CONFIG_VARIANTS
+        );
+        assert_eq!(
+            IMAGE_CLIENT_REGISTRY.map(|entry| entry.script_path),
+            ["install/linux-image.sh", "install/linux-image.sh"]
+        );
+        assert_eq!(
+            IMAGE_CLIENT_REGISTRY.map(|entry| entry.public_runtime_asset),
+            [
+                "sing-box-1.13.13-linux-amd64.tar.gz",
+                "sing-box-1.13.13-linux-arm64.tar.gz"
+            ]
+        );
+        assert!(IMAGE_CLIENT_REGISTRY.iter().all(|entry| {
+            entry
+                .enablement_path
+                .ends_with("/multi-user.target.wants/yaoe-sing-box.service")
+        }));
     }
 
     #[test]
