@@ -159,7 +159,7 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     assert_eq!(json["route"]["rule_set"][0]["download_detour"], "direct");
     assert_eq!(
         json["inbounds"][0]["address"],
-        serde_json::json!(["172.19.0.1/30", "fdfe:dcba:9876::1/126"])
+        serde_json::json!(["172.19.0.1/30"])
     );
     let cidrs = json["route"]["rules"][5]["ip_cidr"].as_array().unwrap();
     assert_eq!(json["route"]["rules"][3]["action"], "bypass");
@@ -175,10 +175,11 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
         json["inbounds"][0]["route_exclude_address"],
         json["route"]["rules"][5]["ip_cidr"]
     );
-    assert!(cidrs.iter().any(|cidr| cidr == "::1/128"));
-    assert!(cidrs.iter().any(|cidr| cidr == "fe80::/10"));
-    assert!(cidrs.iter().any(|cidr| cidr == "fc00::/7"));
-    assert!(cidrs.iter().any(|cidr| cidr == "ff00::/8"));
+    assert!(
+        cidrs
+            .iter()
+            .all(|cidr| !cidr.as_str().unwrap().contains(':'))
+    );
     assert_eq!(json["route"]["rules"][6]["ip_version"], 6);
     assert_eq!(json["route"]["rules"][6]["action"], "reject");
     assert_eq!(json["route"]["rules"][6]["method"], "default");
@@ -246,11 +247,18 @@ fn mobile_client_configs_omit_desktop_tun_and_route_fields() {
         assert_eq!(json["outbounds"][0]["tag"], "proxy");
         assert_eq!(
             json["inbounds"][0]["address"],
-            serde_json::json!(["172.19.0.1/30", "fdfe:dcba:9876::1/126"])
+            serde_json::json!(["172.19.0.1/30"])
         );
         assert_eq!(
             json["inbounds"][0]["route_exclude_address"],
             json["route"]["rules"][4]["ip_cidr"]
+        );
+        assert!(
+            json["inbounds"][0]["route_exclude_address"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|cidr| !cidr.as_str().unwrap().contains(':'))
         );
         assert_eq!(json["route"]["rules"][2]["action"], "route");
         assert_eq!(json["route"]["rules"][3]["action"], "route");
@@ -281,6 +289,18 @@ fn all_platform_configs_pass_sing_box_check_from_path() {
         .unwrap();
         let json: Value = serde_json::from_str(&rendered).unwrap();
         assert_eq!(json["dns"]["strategy"], "ipv4_only");
+        assert_eq!(
+            json["inbounds"][0]["address"],
+            serde_json::json!(["172.19.0.1/30"])
+        );
+        assert!(
+            json["inbounds"][0]["route_exclude_address"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|cidr| !cidr.as_str().unwrap().contains(':'))
+        );
+        assert!(rendered.contains(r#""ip_version": 6"#));
         let first_dns_rule = if platform.is_service() { 1 } else { 0 };
         assert_eq!(
             json["route"]["rules"][first_dns_rule]["action"],

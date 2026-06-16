@@ -44,7 +44,6 @@ pub const HEALTH_PROBE_EXPECTED_STATUS: u16 = 204;
 pub const HEALTH_PROBE_CURL_PROXY_KIND: &str = "socks5-remote-resolve";
 pub const HEALTH_PROBE_BIND_HOST: &str = "127.0.0.1";
 pub const TUN_IPV4_ADDRESS: &str = "172.19.0.1/30";
-pub const TUN_IPV6_ADDRESS: &str = "fdfe:dcba:9876::1/126";
 pub const PUBLIC_IPV6_DENIAL_NO_DROP: bool = true;
 pub const IPV6_REJECT_NO_DROP: bool = PUBLIC_IPV6_DENIAL_NO_DROP;
 pub const NETBIRD_DIRECT_CIDR: &str = "100.64.0.0/10";
@@ -85,7 +84,6 @@ pub const BUILTIN_DIRECT_IPV4_CIDRS: [&str; 6] = [
     "172.16.0.0/12",
     "192.168.0.0/16",
 ];
-pub const BUILTIN_DIRECT_IPV6_CIDRS: [&str; 4] = ["::1/128", "fe80::/10", "fc00::/7", "ff00::/8"];
 pub const SING_BOX_DNS_STRATEGY: &str = "ipv4_only";
 pub const SING_BOX_DNS_HIJACK_PORT: u16 = 53;
 pub const SING_BOX_CN_DNS_TYPE: &str = "https";
@@ -413,7 +411,6 @@ mod tests {
     fn network_containment_constants_match_contract() {
         assert_eq!(HEALTH_PROBE_CURL_PROXY_KIND, "socks5-remote-resolve");
         assert_eq!(TUN_IPV4_ADDRESS, "172.19.0.1/30");
-        assert_eq!(TUN_IPV6_ADDRESS, "fdfe:dcba:9876::1/126");
         assert_eq!(DNS_STRATEGY, "ipv4_only");
         assert_eq!(DNS_HIJACK_PORT, 53);
         assert_eq!(NETBIRD_DIRECT_CIDR, "100.64.0.0/10");

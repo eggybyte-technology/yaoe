@@ -6,10 +6,10 @@ use serde::Serialize;
 use serde_json::Value;
 use yaoe_config::{Config, derive_reality_public_key};
 use yaoe_home::{
-    BUILTIN_DIRECT_IPV4_CIDRS, BUILTIN_DIRECT_IPV6_CIDRS, CN_DNS_PATH, CN_DNS_PORT, CN_DNS_SERVER,
-    CN_DNS_TLS_SERVER_NAME, CN_DNS_TYPE, CN_DOMAIN_PUBLIC_ASSET, CN_DOMAIN_RULE_TAG,
-    CN_IPV4_PUBLIC_ASSET, CN_IPV4_RULE_TAG, DNS_HIJACK_PORT, DNS_STRATEGY, GITEE_RELEASE_TAG,
-    MIHOMO_ALLOW_LAN, MIHOMO_DEFAULT_NAMESERVER, MIHOMO_DIRECT_NAMESERVER, MIHOMO_DNS_ENABLE,
+    BUILTIN_DIRECT_IPV4_CIDRS, CN_DNS_PATH, CN_DNS_PORT, CN_DNS_SERVER, CN_DNS_TLS_SERVER_NAME,
+    CN_DNS_TYPE, CN_DOMAIN_PUBLIC_ASSET, CN_DOMAIN_RULE_TAG, CN_IPV4_PUBLIC_ASSET,
+    CN_IPV4_RULE_TAG, DNS_HIJACK_PORT, DNS_STRATEGY, GITEE_RELEASE_TAG, MIHOMO_ALLOW_LAN,
+    MIHOMO_DEFAULT_NAMESERVER, MIHOMO_DIRECT_NAMESERVER, MIHOMO_DNS_ENABLE,
     MIHOMO_DNS_ENHANCED_MODE, MIHOMO_DNS_IPV6, MIHOMO_FAKE_IP_RANGE, MIHOMO_FALLBACK,
     MIHOMO_FALLBACK_FILTER_DOMAIN, MIHOMO_FALLBACK_FILTER_GEOIP, MIHOMO_FALLBACK_FILTER_GEOIP_CODE,
     MIHOMO_FALLBACK_FILTER_GEOSITE, MIHOMO_GEO_AUTO_UPDATE, MIHOMO_GEO_UPDATE_INTERVAL_HOURS,
@@ -20,7 +20,7 @@ use yaoe_home::{
     MIHOMO_URL_TEST_URL, NETBIRD_DIRECT_CIDR, NETBIRD_DOMAIN_EXACT, NETBIRD_DOMAIN_SUFFIX,
     NETBIRD_MIHOMO_FAKE_IP_FILTER, NETBIRD_PROCESS_NAMES, PUBLIC_IPV6_DENIAL_NO_DROP,
     REMOTE_DNS_PATH, REMOTE_DNS_PORT, REMOTE_DNS_SERVER, REMOTE_DNS_TLS_SERVER_NAME,
-    REMOTE_DNS_TYPE, TUN_IPV4_ADDRESS, TUN_IPV6_ADDRESS, YaoeError, YaoeResult, config_variant,
+    REMOTE_DNS_TYPE, TUN_IPV4_ADDRESS, YaoeError, YaoeResult, config_variant,
 };
 
 #[derive(Debug, Clone)]
@@ -357,12 +357,12 @@ pub fn render_client_config(
         inbounds: vec![TunInbound {
             kind: "tun",
             tag: "tun-in",
-            address: vec![TUN_IPV4_ADDRESS, TUN_IPV6_ADDRESS],
+            address: vec![TUN_IPV4_ADDRESS],
             mtu: 1500,
             auto_route: true,
             auto_redirect: (registry_entry.tun_profile == "linux-service").then_some(true),
             strict_route: (registry_entry.tun_profile != "mobile").then_some(true),
-            route_exclude_address: direct_cidrs(&input.config, &server_names)?,
+            route_exclude_address: direct_ipv4_cidrs(&input.config, &server_names)?,
         }],
         outbounds,
         route: Route {
@@ -679,7 +679,7 @@ fn route_rules(
         outbound: "direct",
     }));
     rules.push(RouteRule::Cidr(CidrRouteRule {
-        ip_cidr: direct_cidrs(config, server_names)?,
+        ip_cidr: direct_ipv4_cidrs(config, server_names)?,
         action: netbird_direct_action,
         outbound: "direct",
     }));
@@ -721,15 +721,6 @@ fn direct_ipv4_cidrs(config: &Config, server_names: &[String]) -> YaoeResult<Vec
             .parse()
             .map_err(|e| YaoeError::Internal(format!("egress IPv4 parse after validation: {e}")))?;
         push_cidr(&mut out, &mut seen, &format!("{ip}/32"))?;
-    }
-    Ok(out)
-}
-
-fn direct_cidrs(config: &Config, server_names: &[String]) -> YaoeResult<Vec<String>> {
-    let mut out = direct_ipv4_cidrs(config, server_names)?;
-    let mut seen: HashSet<String> = out.iter().cloned().collect();
-    for cidr in BUILTIN_DIRECT_IPV6_CIDRS {
-        push_cidr(&mut out, &mut seen, cidr)?;
     }
     Ok(out)
 }
@@ -1070,6 +1061,23 @@ fn validate_shared_client_shape(config: &Value, platform: ClientPlatform) -> Yao
             "generated client route CIDRs and TUN exclusions differ".into(),
         ));
     }
+    for cidr in tun_cidrs {
+        let Some(cidr) = cidr.as_str() else {
+            return Err(YaoeError::Internal(
+                "generated client TUN exclusion CIDR is not a string".into(),
+            ));
+        };
+        let parsed: IpNet = cidr.parse().map_err(|e| {
+            YaoeError::Internal(format!(
+                "generated client TUN exclusion CIDR is invalid: {e}"
+            ))
+        })?;
+        if !matches!(parsed, IpNet::V4(_)) {
+            return Err(YaoeError::Internal(
+                "generated client TUN exclusions must be IPv4-only".into(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -1080,9 +1088,9 @@ fn validate_ipv6_containment(config: &Value) -> YaoeResult<()> {
         .and_then(|inbounds| inbounds.first())
         .and_then(|inbound| inbound.get("address"))
         .ok_or_else(|| YaoeError::Internal("generated client config missing TUN address".into()))?;
-    if address != &serde_json::json!([TUN_IPV4_ADDRESS, TUN_IPV6_ADDRESS]) {
+    if address != &serde_json::json!([TUN_IPV4_ADDRESS]) {
         return Err(YaoeError::Internal(
-            "generated client config must contain IPv4 and IPv6 TUN addresses".into(),
+            "generated client config must contain only the IPv4 TUN address".into(),
         ));
     }
     if config

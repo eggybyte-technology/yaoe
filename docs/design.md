@@ -97,7 +97,7 @@ Cloudflare R2 custom-domain objects -> all generated client configs
 
 YAOE uses a fixed direct allowlist routing posture. Private/local networks, the NetBird overlay CIDR `100.64.0.0/10`, configured direct IPv4 CIDRs, managed-server endpoint IPv4 `/32` exclusions, NetBird Cloud/control domains, NetBird STUN/TURN/relay domains, and CN allowlist matches route direct. Remaining public IPv4 routes through the `proxy` or `PROXY` aggregation group.
 
-YAOE uses IPv4 managed-server endpoints and IPv4 egress semantics. Desktop GUI mihomo profiles set top-level `ipv6: false` and `dns.ipv6: false`. sing-box service and mobile profiles assign both IPv4 and IPv6 TUN addresses, preserve local/private IPv6 scopes, exclude NetBird and local/private routes from TUN route capture, and reject public IPv6 locally before CN rule evaluation.
+YAOE uses IPv4 managed-server endpoints and IPv4 egress semantics. Desktop GUI mihomo profiles set top-level `ipv6: false` and `dns.ipv6: false`. sing-box service and mobile profiles assign only the IPv4 TUN address, keep DNS `strategy = "ipv4_only"`, never emit IPv6 CIDRs in TUN route exclusions, and reject any IPv6 traffic that reaches sing-box before CN rule evaluation.
 
 ### 0.3 Central Constants and Registries
 
@@ -144,7 +144,6 @@ HEALTH_PROBE_REQUEST_TIMEOUT_SECONDS = 8
 HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS = 12
 HEALTH_PROBE_PORT_RETRY_LIMIT = 3
 TUN_IPV4_ADDRESS = "172.19.0.1/30"
-TUN_IPV6_ADDRESS = "fdfe:dcba:9876::1/126"
 PUBLIC_IPV6_DENIAL_NO_DROP = true
 NETBIRD_DIRECT_CIDR = "100.64.0.0/10"
 NETBIRD_PROCESS_NAMES = ["netbird.exe", "NetBird.exe", "netbird", "NetBird", "netbird-ui", "NetBird UI"]
@@ -152,7 +151,6 @@ NETBIRD_DOMAIN_EXACT = ["api.netbird.io", "signal.netbird.io", "stun.netbird.io"
 NETBIRD_DOMAIN_SUFFIX = ["netbird.io", "netbird.cloud", "relay.netbird.io"]
 NETBIRD_MIHOMO_FAKE_IP_FILTER = ["netbird.io", "*.netbird.io", "netbird.cloud", "*.netbird.cloud", "api.netbird.io", "signal.netbird.io", "stun.netbird.io", "turn.netbird.io", "*.relay.netbird.io", "*.lan", "*.local", "localhost.ptlogin2.qq.com"]
 BUILTIN_DIRECT_IPV4_CIDRS = ["127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-BUILTIN_DIRECT_IPV6_CIDRS = ["::1/128", "fe80::/10", "fc00::/7", "ff00::/8"]
 SING_BOX_DNS_STRATEGY = "ipv4_only"
 SING_BOX_DNS_HIJACK_PORT = 53
 SING_BOX_CN_DNS_TYPE = "https"
@@ -2022,10 +2020,10 @@ Every generated sing-box service or mobile config contains:
 
 1. `log.level = "info"`.
 2. One TUN inbound tagged `tun-in`.
-3. TUN `address = ["172.19.0.1/30", "fdfe:dcba:9876::1/126"]`.
+3. TUN `address = ["172.19.0.1/30"]`.
 4. TUN `mtu = 1500`.
 5. TUN `auto_route = true`.
-6. TUN `route_exclude_address` containing built-in IPv4 direct CIDRs, fixed NetBird overlay CIDR, configured IPv4 direct CIDRs, managed-server endpoint IPv4 `/32` CIDRs, and built-in IPv6 direct CIDRs in that exact order after duplicate suppression.
+6. TUN `route_exclude_address` containing only built-in IPv4 direct CIDRs, fixed NetBird overlay CIDR, configured IPv4 direct CIDRs, and managed-server endpoint IPv4 `/32` CIDRs in that exact order after duplicate suppression.
 7. `route.default_domain_resolver = "remote-dns"`.
 8. DNS server `cn-dns` is AliDNS DoH over HTTPS/443 without a DNS detour: `type = "https"`, `server = "223.5.5.5"`, `server_port = 443`, `path = "/dns-query"`, and `tls.server_name = "dns.alidns.com"`.
 9. DNS server `remote-dns` is Cloudflare DoH over `proxy`: `type = "https"`, `server = "1.1.1.1"`, `server_port = 443`, `path = "/dns-query"`, `detour = "proxy"`, and `tls.server_name = "cloudflare-dns.com"`.
@@ -2072,16 +2070,7 @@ The fixed NetBird overlay direct CIDR is exactly:
 100.64.0.0/10
 ```
 
-The built-in IPv6 direct CIDRs are exactly:
-
-```text
-::1/128
-fe80::/10
-fc00::/7
-ff00::/8
-```
-
-Direct CIDR construction order is built-in IPv4 CIDRs, fixed NetBird overlay CIDR, configured IPv4 direct CIDRs, managed-server endpoint IPv4 `/32` CIDRs, then built-in IPv6 CIDRs. The same ordered list is used for sing-box `route.rules[].ip_cidr` and TUN `route_exclude_address`. Canonical duplicates introduced by merging built-in CIDRs, user-provided CIDRs, egress server IP CIDRs, and built-in IPv6 CIDRs are skipped when the same canonical CIDR already exists earlier in the generated list.
+Direct CIDR construction order is built-in IPv4 CIDRs, fixed NetBird overlay CIDR, configured IPv4 direct CIDRs, and managed-server endpoint IPv4 `/32` CIDRs. The same ordered IPv4-only list is used for sing-box `route.rules[].ip_cidr` and TUN `route_exclude_address`. Canonical duplicates introduced by merging built-in CIDRs, user-provided CIDRs, and egress server IP CIDRs are skipped when the same canonical CIDR already exists earlier in the generated list. The renderer MUST NOT emit IPv6 CIDRs such as `::1/128`, `fe80::/10`, `fc00::/7`, or `ff00::/8` in `route_exclude_address`, because Linux `auto_redirect` consumes these exclusions while creating nftables/iproute2 state before user-space IPv6 reject rules can apply.
 
 On Linux service profiles, the NetBird process rule, NetBird domain rules, and direct CIDR rule MUST use sing-box `action = "bypass"` with `outbound = "direct"`. This relies on sing-box 1.13 auto-redirect pre-match bypass support so matching NetBird traffic is excluded at the kernel redirection layer; for non-auto-redirect contexts, the configured outbound keeps the behavior equivalent to direct routing. macOS service and mobile profiles MUST keep `action = "route"` for the same rules.
 
@@ -2197,7 +2186,7 @@ Every Linux service config is equivalent to this shape after substitution and pr
     {
       "type": "tun",
       "tag": "tun-in",
-      "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
+      "address": ["172.19.0.1/30"],
       "mtu": 1500,
       "auto_route": true,
       "auto_redirect": true,
@@ -2210,11 +2199,7 @@ Every Linux service config is equivalent to this shape after substitution and pr
         "172.16.0.0/12",
         "192.168.0.0/16",
         "100.64.0.0/10",
-        "203.0.113.20/32",
-        "::1/128",
-        "fe80::/10",
-        "fc00::/7",
-        "ff00::/8"
+        "203.0.113.20/32"
       ]
     }
   ],
@@ -2304,11 +2289,7 @@ Every Linux service config is equivalent to this shape after substitution and pr
           "172.16.0.0/12",
           "192.168.0.0/16",
           "100.64.0.0/10",
-          "203.0.113.20/32",
-          "::1/128",
-          "fe80::/10",
-          "fc00::/7",
-          "ff00::/8"
+          "203.0.113.20/32"
         ],
         "action": "bypass",
         "outbound": "direct"
