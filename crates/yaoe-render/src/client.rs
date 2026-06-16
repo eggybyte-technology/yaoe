@@ -394,7 +394,12 @@ pub fn render_client_config(
                     update_interval: "1d",
                 },
             ],
-            rules: route_rules(&input.config, &server_names, registry_entry.route_profile)?,
+            rules: route_rules(
+                &input.config,
+                &server_names,
+                registry_entry.route_profile,
+                registry_entry.tun_profile,
+            )?,
             final_out: "proxy",
         },
     };
@@ -647,12 +652,14 @@ fn route_rules(
     config: &Config,
     server_names: &[String],
     route_profile: &str,
+    tun_profile: &str,
 ) -> YaoeResult<Vec<RouteRule>> {
     let mut rules = Vec::new();
+    let netbird_direct_action = netbird_direct_action(tun_profile);
     if route_profile == "service" {
         rules.push(RouteRule::ProcessName(ProcessNameRouteRule {
             process_name: NETBIRD_PROCESS_NAMES.to_vec(),
-            action: "route",
+            action: netbird_direct_action,
             outbound: "direct",
         }));
     }
@@ -663,17 +670,17 @@ fn route_rules(
     rules.push(RouteRule::Sniff(SniffRouteRule { action: "sniff" }));
     rules.push(RouteRule::Domain(DomainRouteRule {
         domain: NETBIRD_DOMAIN_EXACT.to_vec(),
-        action: "route",
+        action: netbird_direct_action,
         outbound: "direct",
     }));
     rules.push(RouteRule::DomainSuffix(DomainSuffixRouteRule {
         domain_suffix: NETBIRD_DOMAIN_SUFFIX.to_vec(),
-        action: "route",
+        action: netbird_direct_action,
         outbound: "direct",
     }));
     rules.push(RouteRule::Cidr(CidrRouteRule {
         ip_cidr: direct_cidrs(config, server_names)?,
-        action: "route",
+        action: netbird_direct_action,
         outbound: "direct",
     }));
     rules.push(RouteRule::Ipv6Reject(Ipv6RejectRouteRule {
@@ -688,6 +695,14 @@ fn route_rules(
         outbound: "direct",
     }));
     Ok(rules)
+}
+
+fn netbird_direct_action(tun_profile: &str) -> &'static str {
+    if tun_profile == "linux-service" {
+        "bypass"
+    } else {
+        "route"
+    }
 }
 
 fn direct_ipv4_cidrs(config: &Config, server_names: &[String]) -> YaoeResult<Vec<String>> {
@@ -785,7 +800,7 @@ pub fn validate_client_semantics(config: &Value, platform: ClientPlatform) -> Ya
             "generated client config contains experimental".into(),
         ));
     }
-    validate_shared_client_shape(config)?;
+    validate_shared_client_shape(config, platform)?;
     validate_ipv6_containment(config)?;
     let rule_sets = config
         .get("route")
@@ -817,7 +832,7 @@ pub fn validate_client_semantics(config: &Value, platform: ClientPlatform) -> Ya
     Ok(())
 }
 
-fn validate_shared_client_shape(config: &Value) -> YaoeResult<()> {
+fn validate_shared_client_shape(config: &Value, platform: ClientPlatform) -> YaoeResult<()> {
     let dns = config
         .get("dns")
         .ok_or_else(|| YaoeError::Internal("generated client config missing DNS".into()))?;
@@ -992,13 +1007,18 @@ fn validate_shared_client_shape(config: &Value) -> YaoeResult<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| YaoeError::Internal("generated client route missing rules".into()))?;
     let mut offset = 0;
+    let netbird_direct_action = if platform.is_linux() {
+        "bypass"
+    } else {
+        "route"
+    };
     if rules
         .first()
         .and_then(|rule| rule.get("process_name"))
         .is_some()
     {
         if rules[0].get("process_name") != Some(&serde_json::json!(NETBIRD_PROCESS_NAMES))
-            || rules[0].get("action").and_then(Value::as_str) != Some("route")
+            || rules[0].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
             || rules[0].get("outbound").and_then(Value::as_str) != Some("direct")
         {
             return Err(YaoeError::Internal(
@@ -1012,16 +1032,16 @@ fn validate_shared_client_shape(config: &Value) -> YaoeResult<()> {
         || rules[offset].get("action").and_then(Value::as_str) != Some("hijack-dns")
         || rules[offset + 1].get("action").and_then(Value::as_str) != Some("sniff")
         || rules[offset + 2].get("domain") != Some(&serde_json::json!(NETBIRD_DOMAIN_EXACT))
-        || rules[offset + 2].get("action").and_then(Value::as_str) != Some("route")
+        || rules[offset + 2].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
         || rules[offset + 2].get("outbound").and_then(Value::as_str) != Some("direct")
         || rules[offset + 3].get("domain_suffix") != Some(&serde_json::json!(NETBIRD_DOMAIN_SUFFIX))
-        || rules[offset + 3].get("action").and_then(Value::as_str) != Some("route")
+        || rules[offset + 3].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
         || rules[offset + 3].get("outbound").and_then(Value::as_str) != Some("direct")
         || rules[offset + 4]
             .get("ip_cidr")
             .and_then(Value::as_array)
             .is_none()
-        || rules[offset + 4].get("action").and_then(Value::as_str) != Some("route")
+        || rules[offset + 4].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
         || rules[offset + 4].get("outbound").and_then(Value::as_str) != Some("direct")
         || rules[offset + 6].get("rule_set")
             != Some(&serde_json::json!([CN_DOMAIN_RULE_TAG, CN_IPV4_RULE_TAG]))

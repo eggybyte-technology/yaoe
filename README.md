@@ -145,6 +145,18 @@ NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured
 direct CIDRs, managed-server endpoint `/32` addresses, and CN allowlist traffic
 are direct by default; remaining public IPv4 traffic uses proxy aggregation.
 
+On Linux sing-box service profiles, NetBird process traffic, NetBird
+control/STUN/TURN/relay domains, and direct CIDRs use sing-box `bypass` with
+`outbound = "direct"` under `auto_redirect`, so matching NetBird traffic is
+excluded before it can be sent to the YAOE egress proxy. A normal browser
+request to a public IP-check site is still proxied unless that request is
+itself routed through NetBird.
+
+On macOS sing-box service profiles, the same NetBird process names, including
+the macOS GUI process `netbird-ui`, and the same NetBird domains/CIDRs use
+ordinary `route` rules to the `direct` outbound because sing-box `bypass` and
+`auto_redirect` are Linux-only.
+
 The configured direct CIDRs are additional operator-defined IPv4 CIDRs routed
 direct.
 

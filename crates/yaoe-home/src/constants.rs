@@ -48,7 +48,14 @@ pub const TUN_IPV6_ADDRESS: &str = "fdfe:dcba:9876::1/126";
 pub const PUBLIC_IPV6_DENIAL_NO_DROP: bool = true;
 pub const IPV6_REJECT_NO_DROP: bool = PUBLIC_IPV6_DENIAL_NO_DROP;
 pub const NETBIRD_DIRECT_CIDR: &str = "100.64.0.0/10";
-pub const NETBIRD_PROCESS_NAMES: [&str; 4] = ["netbird.exe", "NetBird.exe", "netbird", "NetBird"];
+pub const NETBIRD_PROCESS_NAMES: [&str; 6] = [
+    "netbird.exe",
+    "NetBird.exe",
+    "netbird",
+    "NetBird",
+    "netbird-ui",
+    "NetBird UI",
+];
 pub const NETBIRD_DOMAIN_EXACT: [&str; 4] = [
     "api.netbird.io",
     "signal.netbird.io",
@@ -412,7 +419,14 @@ mod tests {
         assert_eq!(NETBIRD_DIRECT_CIDR, "100.64.0.0/10");
         assert_eq!(
             NETBIRD_PROCESS_NAMES,
-            ["netbird.exe", "NetBird.exe", "netbird", "NetBird"]
+            [
+                "netbird.exe",
+                "NetBird.exe",
+                "netbird",
+                "NetBird",
+                "netbird-ui",
+                "NetBird UI"
+            ]
         );
         assert_eq!(
             BUILTIN_DIRECT_IPV4_CIDRS,
