@@ -120,6 +120,11 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     );
     assert_eq!(
         json["dns"]["rules"][0]["domain"],
+        serde_json::json!(["pkgs.netbird.io"])
+    );
+    assert_eq!(json["dns"]["rules"][0]["server"], "remote-dns");
+    assert_eq!(
+        json["dns"]["rules"][1]["domain"],
         serde_json::json!([
             "api.netbird.io",
             "signal.netbird.io",
@@ -127,13 +132,13 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
             "turn.netbird.io"
         ])
     );
-    assert_eq!(json["dns"]["rules"][0]["server"], "cn-dns");
+    assert_eq!(json["dns"]["rules"][1]["server"], "cn-dns");
     assert_eq!(
-        json["dns"]["rules"][1]["domain_suffix"],
+        json["dns"]["rules"][2]["domain_suffix"],
         serde_json::json!(["netbird.io", "netbird.cloud", "relay.netbird.io"])
     );
     assert_eq!(
-        json["dns"]["rules"][2]["rule_set"],
+        json["dns"]["rules"][3]["rule_set"],
         serde_json::json!(["cn-domain"])
     );
     assert_eq!(
@@ -161,32 +166,38 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
         json["inbounds"][0]["address"],
         serde_json::json!(["172.19.0.1/30"])
     );
-    let cidrs = json["route"]["rules"][5]["ip_cidr"].as_array().unwrap();
-    assert_eq!(json["route"]["rules"][3]["action"], "bypass");
-    assert_eq!(json["route"]["rules"][3]["outbound"], "direct");
+    let cidrs = json["route"]["rules"][6]["ip_cidr"].as_array().unwrap();
+    assert_eq!(
+        json["route"]["rules"][3]["domain"],
+        serde_json::json!(["pkgs.netbird.io"])
+    );
+    assert_eq!(json["route"]["rules"][3]["action"], "route");
+    assert_eq!(json["route"]["rules"][3]["outbound"], "proxy");
     assert_eq!(json["route"]["rules"][4]["action"], "bypass");
     assert_eq!(json["route"]["rules"][4]["outbound"], "direct");
     assert_eq!(json["route"]["rules"][5]["action"], "bypass");
     assert_eq!(json["route"]["rules"][5]["outbound"], "direct");
+    assert_eq!(json["route"]["rules"][6]["action"], "bypass");
+    assert_eq!(json["route"]["rules"][6]["outbound"], "direct");
     assert_eq!(cidrs[0], "127.0.0.0/8");
     assert!(cidrs.iter().any(|cidr| cidr == "100.64.0.0/10"));
     assert!(cidrs.iter().any(|cidr| cidr == "198.51.100.10/32"));
     assert_eq!(
         json["inbounds"][0]["route_exclude_address"],
-        json["route"]["rules"][5]["ip_cidr"]
+        json["route"]["rules"][6]["ip_cidr"]
     );
     assert!(
         cidrs
             .iter()
             .all(|cidr| !cidr.as_str().unwrap().contains(':'))
     );
-    assert_eq!(json["route"]["rules"][6]["ip_version"], 6);
-    assert_eq!(json["route"]["rules"][6]["action"], "reject");
-    assert_eq!(json["route"]["rules"][6]["method"], "default");
-    assert_eq!(json["route"]["rules"][6]["no_drop"], true);
-    assert!(json["route"]["rules"][6].get("outbound").is_none());
+    assert_eq!(json["route"]["rules"][7]["ip_version"], 6);
+    assert_eq!(json["route"]["rules"][7]["action"], "reject");
+    assert_eq!(json["route"]["rules"][7]["method"], "default");
+    assert_eq!(json["route"]["rules"][7]["no_drop"], true);
+    assert!(json["route"]["rules"][7].get("outbound").is_none());
     assert_eq!(
-        json["route"]["rules"][7]["rule_set"],
+        json["route"]["rules"][8]["rule_set"],
         serde_json::json!(["cn-domain", "cn-ipv4"])
     );
     assert!(json["outbounds"][1].get("network").is_none());
@@ -226,6 +237,7 @@ fn non_linux_client_config_omits_auto_redirect() {
     assert_eq!(json["route"]["rules"][3]["action"], "route");
     assert_eq!(json["route"]["rules"][4]["action"], "route");
     assert_eq!(json["route"]["rules"][5]["action"], "route");
+    assert_eq!(json["route"]["rules"][6]["action"], "route");
 }
 
 #[test]
@@ -251,7 +263,7 @@ fn mobile_client_configs_omit_desktop_tun_and_route_fields() {
         );
         assert_eq!(
             json["inbounds"][0]["route_exclude_address"],
-            json["route"]["rules"][4]["ip_cidr"]
+            json["route"]["rules"][5]["ip_cidr"]
         );
         assert!(
             json["inbounds"][0]["route_exclude_address"]
@@ -263,8 +275,9 @@ fn mobile_client_configs_omit_desktop_tun_and_route_fields() {
         assert_eq!(json["route"]["rules"][2]["action"], "route");
         assert_eq!(json["route"]["rules"][3]["action"], "route");
         assert_eq!(json["route"]["rules"][4]["action"], "route");
-        assert_eq!(json["route"]["rules"][5]["ip_version"], 6);
-        assert_eq!(json["route"]["rules"][5]["no_drop"], true);
+        assert_eq!(json["route"]["rules"][5]["action"], "route");
+        assert_eq!(json["route"]["rules"][6]["ip_version"], 6);
+        assert_eq!(json["route"]["rules"][6]["no_drop"], true);
     }
 }
 
@@ -342,6 +355,9 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("  direct-nameserver-follow-policy: true\n"));
     assert!(rendered.contains("    - https://1.1.1.1/dns-query#PROXY\n"));
     assert!(rendered.contains("    geosite:\n      - gfw\n"));
+    assert!(
+        rendered.contains("    \"pkgs.netbird.io\":\n      - https://1.1.1.1/dns-query#PROXY\n")
+    );
     assert!(rendered.contains("tun:\n  enable: true\n  stack: mixed\n"));
     assert!(rendered.contains("  route-exclude-address:\n    - 127.0.0.0/8\n"));
     assert!(rendered.contains("  - name: egress-hk\n    type: vless\n"));
@@ -352,6 +368,7 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("  - PROCESS-NAME,netbird-ui,DIRECT\n"));
     assert!(rendered.contains("  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve\n"));
     assert!(rendered.contains("  - DOMAIN,api.netbird.io,DIRECT\n"));
+    assert!(rendered.contains("  - DOMAIN,pkgs.netbird.io,PROXY\n"));
     assert!(rendered.contains("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n"));
     assert!(rendered.contains("  - GEOSITE,cn,DIRECT\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY\n"));
     assert!(!rendered.contains("windows"));

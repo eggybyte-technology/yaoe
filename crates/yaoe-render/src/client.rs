@@ -18,9 +18,10 @@ use yaoe_home::{
     MIHOMO_TUN_AUTO_DETECT_INTERFACE, MIHOMO_TUN_AUTO_ROUTE, MIHOMO_TUN_DNS_HIJACK,
     MIHOMO_TUN_ENABLE, MIHOMO_TUN_STACK, MIHOMO_TUN_STRICT_ROUTE, MIHOMO_URL_TEST_INTERVAL_SECONDS,
     MIHOMO_URL_TEST_URL, NETBIRD_DIRECT_CIDR, NETBIRD_DOMAIN_EXACT, NETBIRD_DOMAIN_SUFFIX,
-    NETBIRD_MIHOMO_FAKE_IP_FILTER, NETBIRD_PROCESS_NAMES, PUBLIC_IPV6_DENIAL_NO_DROP,
-    REMOTE_DNS_PATH, REMOTE_DNS_PORT, REMOTE_DNS_SERVER, REMOTE_DNS_TLS_SERVER_NAME,
-    REMOTE_DNS_TYPE, TUN_IPV4_ADDRESS, YaoeError, YaoeResult, config_variant,
+    NETBIRD_MIHOMO_FAKE_IP_FILTER, NETBIRD_PROCESS_NAMES, NETBIRD_PROXY_DOMAIN_EXACT,
+    PUBLIC_IPV6_DENIAL_NO_DROP, REMOTE_DNS_PATH, REMOTE_DNS_PORT, REMOTE_DNS_SERVER,
+    REMOTE_DNS_TLS_SERVER_NAME, REMOTE_DNS_TYPE, TUN_IPV4_ADDRESS, YaoeError, YaoeResult,
+    config_variant,
 };
 
 #[derive(Debug, Clone)]
@@ -134,6 +135,12 @@ pub fn render_clash_verge_profile(input: &ClientRenderInput) -> YaoeResult<Strin
         out.push_str(&format!("    - \"{filter}\"\n"));
     }
     out.push_str("  nameserver-policy:\n");
+    for policy in NETBIRD_PROXY_DOMAIN_EXACT {
+        out.push_str(&format!("    \"{policy}\":\n"));
+        for server in MIHOMO_FALLBACK {
+            out.push_str(&format!("      - {server}\n"));
+        }
+    }
     for policy in ["+.netbird.io", "+.netbird.cloud", "geosite:cn"] {
         out.push_str(&format!("    \"{policy}\":\n"));
         for server in MIHOMO_NAMESERVER {
@@ -241,6 +248,9 @@ pub fn render_clash_verge_profile(input: &ClientRenderInput) -> YaoeResult<Strin
     for domain in NETBIRD_DOMAIN_EXACT {
         out.push_str(&format!("  - DOMAIN,{domain},DIRECT\n"));
     }
+    for domain in NETBIRD_PROXY_DOMAIN_EXACT {
+        out.push_str(&format!("  - DOMAIN,{domain},PROXY\n"));
+    }
     for suffix in NETBIRD_DOMAIN_SUFFIX {
         out.push_str(&format!("  - DOMAIN-SUFFIX,{suffix},DIRECT\n"));
     }
@@ -334,6 +344,11 @@ pub fn render_client_config(
                 },
             ],
             rules: vec![
+                DnsRule::Domain(DnsDomainRule {
+                    domain: NETBIRD_PROXY_DOMAIN_EXACT.to_vec(),
+                    action: "route",
+                    server: "remote-dns",
+                }),
                 DnsRule::Domain(DnsDomainRule {
                     domain: NETBIRD_DOMAIN_EXACT.to_vec(),
                     action: "route",
@@ -669,6 +684,11 @@ fn route_rules(
     }));
     rules.push(RouteRule::Sniff(SniffRouteRule { action: "sniff" }));
     rules.push(RouteRule::Domain(DomainRouteRule {
+        domain: NETBIRD_PROXY_DOMAIN_EXACT.to_vec(),
+        action: "route",
+        outbound: "proxy",
+    }));
+    rules.push(RouteRule::Domain(DomainRouteRule {
         domain: NETBIRD_DOMAIN_EXACT.to_vec(),
         action: netbird_direct_action,
         outbound: "direct",
@@ -877,16 +897,19 @@ fn validate_shared_client_shape(config: &Value, platform: ClientPlatform) -> Yao
         .get("rules")
         .and_then(Value::as_array)
         .ok_or_else(|| YaoeError::Internal("generated client DNS missing rules".into()))?;
-    if dns_rules.len() != 3
-        || dns_rules[0].get("domain") != Some(&serde_json::json!(NETBIRD_DOMAIN_EXACT))
+    if dns_rules.len() != 4
+        || dns_rules[0].get("domain") != Some(&serde_json::json!(NETBIRD_PROXY_DOMAIN_EXACT))
         || dns_rules[0].get("action").and_then(Value::as_str) != Some("route")
-        || dns_rules[0].get("server").and_then(Value::as_str) != Some("cn-dns")
-        || dns_rules[1].get("domain_suffix") != Some(&serde_json::json!(NETBIRD_DOMAIN_SUFFIX))
+        || dns_rules[0].get("server").and_then(Value::as_str) != Some("remote-dns")
+        || dns_rules[1].get("domain") != Some(&serde_json::json!(NETBIRD_DOMAIN_EXACT))
         || dns_rules[1].get("action").and_then(Value::as_str) != Some("route")
         || dns_rules[1].get("server").and_then(Value::as_str) != Some("cn-dns")
-        || dns_rules[2].get("rule_set") != Some(&serde_json::json!([CN_DOMAIN_RULE_TAG]))
+        || dns_rules[2].get("domain_suffix") != Some(&serde_json::json!(NETBIRD_DOMAIN_SUFFIX))
         || dns_rules[2].get("action").and_then(Value::as_str) != Some("route")
         || dns_rules[2].get("server").and_then(Value::as_str) != Some("cn-dns")
+        || dns_rules[3].get("rule_set") != Some(&serde_json::json!([CN_DOMAIN_RULE_TAG]))
+        || dns_rules[3].get("action").and_then(Value::as_str) != Some("route")
+        || dns_rules[3].get("server").and_then(Value::as_str) != Some("cn-dns")
         || count_key(&Value::Array(dns_rules.clone()), "strategy") != 0
     {
         return Err(YaoeError::Internal(
@@ -1018,32 +1041,35 @@ fn validate_shared_client_shape(config: &Value, platform: ClientPlatform) -> Yao
         }
         offset = 1;
     }
-    if rules.len() != offset + 7
+    if rules.len() != offset + 8
         || rules[offset].get("port").and_then(Value::as_u64) != Some(DNS_HIJACK_PORT.into())
         || rules[offset].get("action").and_then(Value::as_str) != Some("hijack-dns")
         || rules[offset + 1].get("action").and_then(Value::as_str) != Some("sniff")
-        || rules[offset + 2].get("domain") != Some(&serde_json::json!(NETBIRD_DOMAIN_EXACT))
-        || rules[offset + 2].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
-        || rules[offset + 2].get("outbound").and_then(Value::as_str) != Some("direct")
-        || rules[offset + 3].get("domain_suffix") != Some(&serde_json::json!(NETBIRD_DOMAIN_SUFFIX))
+        || rules[offset + 2].get("domain") != Some(&serde_json::json!(NETBIRD_PROXY_DOMAIN_EXACT))
+        || rules[offset + 2].get("action").and_then(Value::as_str) != Some("route")
+        || rules[offset + 2].get("outbound").and_then(Value::as_str) != Some("proxy")
+        || rules[offset + 3].get("domain") != Some(&serde_json::json!(NETBIRD_DOMAIN_EXACT))
         || rules[offset + 3].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
         || rules[offset + 3].get("outbound").and_then(Value::as_str) != Some("direct")
-        || rules[offset + 4]
+        || rules[offset + 4].get("domain_suffix") != Some(&serde_json::json!(NETBIRD_DOMAIN_SUFFIX))
+        || rules[offset + 4].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
+        || rules[offset + 4].get("outbound").and_then(Value::as_str) != Some("direct")
+        || rules[offset + 5]
             .get("ip_cidr")
             .and_then(Value::as_array)
             .is_none()
-        || rules[offset + 4].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
-        || rules[offset + 4].get("outbound").and_then(Value::as_str) != Some("direct")
-        || rules[offset + 6].get("rule_set")
+        || rules[offset + 5].get("action").and_then(Value::as_str) != Some(netbird_direct_action)
+        || rules[offset + 5].get("outbound").and_then(Value::as_str) != Some("direct")
+        || rules[offset + 7].get("rule_set")
             != Some(&serde_json::json!([CN_DOMAIN_RULE_TAG, CN_IPV4_RULE_TAG]))
-        || rules[offset + 6].get("action").and_then(Value::as_str) != Some("route")
-        || rules[offset + 6].get("outbound").and_then(Value::as_str) != Some("direct")
+        || rules[offset + 7].get("action").and_then(Value::as_str) != Some("route")
+        || rules[offset + 7].get("outbound").and_then(Value::as_str) != Some("direct")
     {
         return Err(YaoeError::Internal(
             "generated client route rules do not match contract order".into(),
         ));
     }
-    let route_cidrs = rules[offset + 4]
+    let route_cidrs = rules[offset + 5]
         .get("ip_cidr")
         .and_then(Value::as_array)
         .ok_or_else(|| YaoeError::Internal("generated client route missing CIDRs".into()))?;
