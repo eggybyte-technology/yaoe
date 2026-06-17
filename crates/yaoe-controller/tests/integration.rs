@@ -120,7 +120,7 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     );
     assert_eq!(
         json["dns"]["rules"][0]["domain"],
-        serde_json::json!(["pkgs.netbird.io"])
+        serde_json::json!(["app.netbird.io", "pkgs.netbird.io"])
     );
     assert_eq!(json["dns"]["rules"][0]["server"], "remote-dns");
     assert_eq!(
@@ -169,7 +169,7 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     let cidrs = json["route"]["rules"][6]["ip_cidr"].as_array().unwrap();
     assert_eq!(
         json["route"]["rules"][3]["domain"],
-        serde_json::json!(["pkgs.netbird.io"])
+        serde_json::json!(["app.netbird.io", "pkgs.netbird.io"])
     );
     assert_eq!(json["route"]["rules"][3]["action"], "route");
     assert_eq!(json["route"]["rules"][3]["outbound"], "proxy");
@@ -356,6 +356,9 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("    - https://1.1.1.1/dns-query#PROXY\n"));
     assert!(rendered.contains("    geosite:\n      - gfw\n"));
     assert!(
+        rendered.contains("    \"app.netbird.io\":\n      - https://1.1.1.1/dns-query#PROXY\n")
+    );
+    assert!(
         rendered.contains("    \"pkgs.netbird.io\":\n      - https://1.1.1.1/dns-query#PROXY\n")
     );
     assert!(rendered.contains("tun:\n  enable: true\n  stack: mixed\n"));
@@ -368,8 +371,21 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("  - PROCESS-NAME,netbird-ui,DIRECT\n"));
     assert!(rendered.contains("  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve\n"));
     assert!(rendered.contains("  - DOMAIN,api.netbird.io,DIRECT\n"));
+    assert!(rendered.contains("  - DOMAIN,app.netbird.io,PROXY\n"));
     assert!(rendered.contains("  - DOMAIN,pkgs.netbird.io,PROXY\n"));
     assert!(rendered.contains("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n"));
+    assert!(
+        rendered.find("  - DOMAIN,app.netbird.io,PROXY\n").unwrap()
+            < rendered
+                .find("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n")
+                .unwrap()
+    );
+    assert!(
+        rendered.find("  - DOMAIN,pkgs.netbird.io,PROXY\n").unwrap()
+            < rendered
+                .find("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n")
+                .unwrap()
+    );
     assert!(rendered.contains("  - GEOSITE,cn,DIRECT\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY\n"));
     assert!(!rendered.contains("windows"));
     assert!(!rendered.contains("::1/128"));

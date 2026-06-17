@@ -164,8 +164,9 @@ Generated configs implement IPv4 egress semantics: private/local traffic,
 NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured
 direct CIDRs, managed-server endpoint `/32` addresses, and CN allowlist traffic
 are direct by default; remaining public IPv4 traffic uses proxy aggregation.
-NetBird package repository traffic for `pkgs.netbird.io` also uses proxy
-aggregation for faster binary downloads.
+NetBird web app traffic for `app.netbird.io` and package repository traffic for
+`pkgs.netbird.io` also use proxy aggregation for faster page loads and binary
+downloads.
 
 On Linux sing-box service profiles, NetBird process traffic, NetBird
 control/STUN/TURN/relay domains, and direct CIDRs use sing-box `bypass` with
