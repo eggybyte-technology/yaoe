@@ -161,15 +161,15 @@ yaoe client --image
 ```
 
 Generated configs implement IPv4 egress semantics: private/local traffic,
-NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured
+NetBird overlay traffic, NetBird signal/STUN/TURN/relay traffic, configured
 direct CIDRs, managed-server endpoint `/32` addresses, and CN allowlist traffic
 are direct by default; remaining public IPv4 traffic uses proxy aggregation.
-NetBird web app traffic for `app.netbird.io` and package repository traffic for
-`pkgs.netbird.io` also use proxy aggregation for faster page loads and binary
-downloads.
+NetBird web/API traffic for `app.netbird.io` and `api.netbird.io`, plus package
+repository traffic for `pkgs.netbird.io`, use proxy aggregation for faster page
+loads and binary downloads.
 
 On Linux sing-box service profiles, NetBird process traffic, NetBird
-control/STUN/TURN/relay domains, and direct CIDRs use sing-box `bypass` with
+signal/STUN/TURN/relay domains, and direct CIDRs use sing-box `bypass` with
 `outbound = "direct"` under `auto_redirect`, so matching NetBird traffic is
 excluded before it can be sent to the YAOE egress proxy. A normal browser
 request to a public IP-check site is still proxied unless that request is

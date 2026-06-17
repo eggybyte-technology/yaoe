@@ -76,13 +76,10 @@ pub const NETBIRD_PROCESS_NAMES: [&str; 6] = [
     "netbird-ui",
     "NetBird UI",
 ];
-pub const NETBIRD_DOMAIN_EXACT: [&str; 4] = [
-    "api.netbird.io",
-    "signal.netbird.io",
-    "stun.netbird.io",
-    "turn.netbird.io",
-];
-pub const NETBIRD_PROXY_DOMAIN_EXACT: [&str; 2] = ["app.netbird.io", "pkgs.netbird.io"];
+pub const NETBIRD_DOMAIN_EXACT: [&str; 3] =
+    ["signal.netbird.io", "stun.netbird.io", "turn.netbird.io"];
+pub const NETBIRD_PROXY_DOMAIN_EXACT: [&str; 3] =
+    ["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"];
 pub const NETBIRD_DOMAIN_SUFFIX: [&str; 3] = ["netbird.io", "netbird.cloud", "relay.netbird.io"];
 pub const NETBIRD_MIHOMO_FAKE_IP_FILTER: [&str; 12] = [
     "netbird.io",

@@ -120,17 +120,12 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     );
     assert_eq!(
         json["dns"]["rules"][0]["domain"],
-        serde_json::json!(["app.netbird.io", "pkgs.netbird.io"])
+        serde_json::json!(["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"])
     );
     assert_eq!(json["dns"]["rules"][0]["server"], "remote-dns");
     assert_eq!(
         json["dns"]["rules"][1]["domain"],
-        serde_json::json!([
-            "api.netbird.io",
-            "signal.netbird.io",
-            "stun.netbird.io",
-            "turn.netbird.io"
-        ])
+        serde_json::json!(["signal.netbird.io", "stun.netbird.io", "turn.netbird.io"])
     );
     assert_eq!(json["dns"]["rules"][1]["server"], "cn-dns");
     assert_eq!(
@@ -169,7 +164,7 @@ fn client_config_renders_reality_urltest_and_direct_srs() {
     let cidrs = json["route"]["rules"][6]["ip_cidr"].as_array().unwrap();
     assert_eq!(
         json["route"]["rules"][3]["domain"],
-        serde_json::json!(["app.netbird.io", "pkgs.netbird.io"])
+        serde_json::json!(["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"])
     );
     assert_eq!(json["route"]["rules"][3]["action"], "route");
     assert_eq!(json["route"]["rules"][3]["outbound"], "proxy");
@@ -356,6 +351,9 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("    - https://1.1.1.1/dns-query#PROXY\n"));
     assert!(rendered.contains("    geosite:\n      - gfw\n"));
     assert!(
+        rendered.contains("    \"api.netbird.io\":\n      - https://1.1.1.1/dns-query#PROXY\n")
+    );
+    assert!(
         rendered.contains("    \"app.netbird.io\":\n      - https://1.1.1.1/dns-query#PROXY\n")
     );
     assert!(
@@ -370,10 +368,19 @@ fn clash_verge_profile_renders_mihomo_yaml_contract() {
     assert!(rendered.contains("  - PROCESS-NAME,netbird.exe,DIRECT\n"));
     assert!(rendered.contains("  - PROCESS-NAME,netbird-ui,DIRECT\n"));
     assert!(rendered.contains("  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve\n"));
-    assert!(rendered.contains("  - DOMAIN,api.netbird.io,DIRECT\n"));
+    assert!(rendered.contains("  - DOMAIN,api.netbird.io,PROXY\n"));
     assert!(rendered.contains("  - DOMAIN,app.netbird.io,PROXY\n"));
     assert!(rendered.contains("  - DOMAIN,pkgs.netbird.io,PROXY\n"));
+    assert!(rendered.contains("  - DOMAIN,signal.netbird.io,DIRECT\n"));
+    assert!(rendered.contains("  - DOMAIN,stun.netbird.io,DIRECT\n"));
+    assert!(rendered.contains("  - DOMAIN,turn.netbird.io,DIRECT\n"));
     assert!(rendered.contains("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n"));
+    assert!(
+        rendered.find("  - DOMAIN,api.netbird.io,PROXY\n").unwrap()
+            < rendered
+                .find("  - DOMAIN-SUFFIX,netbird.io,DIRECT\n")
+                .unwrap()
+    );
     assert!(
         rendered.find("  - DOMAIN,app.netbird.io,PROXY\n").unwrap()
             < rendered
@@ -973,7 +980,7 @@ fn readme_documents_os_level_client_blocks_and_ipv6_containment() {
     assert!(readme.contains("YAOE_IMAGE_ARCH=arm64"));
     assert!(readme.contains("Generated configs implement IPv4 egress semantics"));
     assert!(readme.contains("NetBird overlay traffic"));
-    assert!(readme.contains("NetBird control/STUN/TURN/relay traffic"));
+    assert!(readme.contains("NetBird signal/STUN/TURN/relay traffic"));
     assert!(readme.contains("configured direct CIDRs"));
     assert!(readme.contains("managed-server endpoint `/32` addresses"));
     assert!(readme.contains("CN allowlist traffic"));

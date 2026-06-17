@@ -163,8 +163,8 @@ TUN_IPV4_ADDRESS = "172.19.0.1/30"
 PUBLIC_IPV6_DENIAL_NO_DROP = true
 NETBIRD_DIRECT_CIDR = "100.64.0.0/10"
 NETBIRD_PROCESS_NAMES = ["netbird.exe", "NetBird.exe", "netbird", "NetBird", "netbird-ui", "NetBird UI"]
-NETBIRD_DOMAIN_EXACT = ["api.netbird.io", "signal.netbird.io", "stun.netbird.io", "turn.netbird.io"]
-NETBIRD_PROXY_DOMAIN_EXACT = ["app.netbird.io", "pkgs.netbird.io"]
+NETBIRD_DOMAIN_EXACT = ["signal.netbird.io", "stun.netbird.io", "turn.netbird.io"]
+NETBIRD_PROXY_DOMAIN_EXACT = ["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"]
 NETBIRD_DOMAIN_SUFFIX = ["netbird.io", "netbird.cloud", "relay.netbird.io"]
 NETBIRD_MIHOMO_FAKE_IP_FILTER = ["netbird.io", "*.netbird.io", "netbird.cloud", "*.netbird.cloud", "api.netbird.io", "signal.netbird.io", "stun.netbird.io", "turn.netbird.io", "*.relay.netbird.io", "*.lan", "*.local", "localhost.ptlogin2.qq.com"]
 BUILTIN_DIRECT_IPV4_CIDRS = ["127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
@@ -2061,6 +2061,9 @@ dns:
     - "*.local"
     - "localhost.ptlogin2.qq.com"
   nameserver-policy:
+    "api.netbird.io":
+      - https://1.1.1.1/dns-query#PROXY
+      - https://8.8.8.8/dns-query#PROXY
     "app.netbird.io":
       - https://1.1.1.1/dns-query#PROXY
       - https://8.8.8.8/dns-query#PROXY
@@ -2175,10 +2178,10 @@ rules:
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
   - IP-CIDR,<configured direct CIDR>,DIRECT,no-resolve
   - IP-CIDR,<server endpoint IPv4>/32,DIRECT,no-resolve
-  - DOMAIN,api.netbird.io,DIRECT
   - DOMAIN,signal.netbird.io,DIRECT
   - DOMAIN,stun.netbird.io,DIRECT
   - DOMAIN,turn.netbird.io,DIRECT
+  - DOMAIN,api.netbird.io,PROXY
   - DOMAIN,app.netbird.io,PROXY
   - DOMAIN,pkgs.netbird.io,PROXY
   - DOMAIN-SUFFIX,relay.netbird.io,DIRECT
@@ -2204,7 +2207,7 @@ Every generated sing-box service or mobile config contains:
 7. `route.default_domain_resolver = "remote-dns"`.
 8. DNS server `cn-dns` is AliDNS DoH over HTTPS/443 without a DNS detour: `type = "https"`, `server = "223.5.5.5"`, `server_port = 443`, `path = "/dns-query"`, and `tls.server_name = "dns.alidns.com"`.
 9. DNS server `remote-dns` is Cloudflare DoH over `proxy`: `type = "https"`, `server = "1.1.1.1"`, `server_port = 443`, `path = "/dns-query"`, `detour = "proxy"`, and `tls.server_name = "cloudflare-dns.com"`.
-10. DNS rules first route `app.netbird.io` and `pkgs.netbird.io` to `remote-dns`, then route NetBird exact domains, NetBird suffix domains, and the `cn-domain` rule set to `cn-dns` before DNS final selection.
+10. DNS rules first route `api.netbird.io`, `app.netbird.io`, and `pkgs.netbird.io` to `remote-dns`, then route NetBird exact domains, NetBird suffix domains, and the `cn-domain` rule set to `cn-dns` before DNS final selection.
 11. DNS uses global `strategy = "ipv4_only"`.
 12. DNS `reverse_mapping = true`.
 13. One VLESS outbound for each configured server.
@@ -2220,7 +2223,7 @@ Every generated sing-box service or mobile config contains:
 23. Service desktop configs include the first route rule that sends `NETBIRD_PROCESS_NAMES` to `direct`; Linux service configs use `action = "bypass"` for this rule under `auto_redirect`, while macOS service configs use `action = "route"`. Mobile configs do not include a process rule.
 24. The next route rule is `{ "port": 53, "action": "hijack-dns" }`.
 25. The next route rule is `{ "action": "sniff" }`.
-26. The next route rule sends `app.netbird.io` and `pkgs.netbird.io` to `proxy` with `action = "route"` so web app traffic and package repository downloads do not match the later `netbird.io` direct suffix rule.
+26. The next route rule sends `api.netbird.io`, `app.netbird.io`, and `pkgs.netbird.io` to `proxy` with `action = "route"` so browser web/API traffic and package repository downloads do not match the later `netbird.io` direct suffix rule. On desktop service profiles, NetBird-owned API traffic still matches the earlier process rule and remains direct.
 27. The next route rules send NetBird exact domains and NetBird suffix domains to `direct`; Linux service configs use `action = "bypass"` for these rules under `auto_redirect`, while macOS and mobile configs use `action = "route"`.
 28. The next route rule sends direct CIDRs to `direct`; Linux service configs use `action = "bypass"` for this rule under `auto_redirect`, while macOS and mobile configs use `action = "route"`.
 29. The next route rule rejects public IPv6 with `ip_version = 6`, `action = "reject"`, `method = "default"`, and `no_drop = true`.
@@ -2250,12 +2253,11 @@ The fixed NetBird overlay direct CIDR is exactly:
 
 Direct CIDR construction order is built-in IPv4 CIDRs, fixed NetBird overlay CIDR, configured IPv4 direct CIDRs, and managed-server endpoint IPv4 `/32` CIDRs. The same ordered IPv4-only list is used for sing-box `route.rules[].ip_cidr` and TUN `route_exclude_address`. Canonical duplicates introduced by merging built-in CIDRs, user-provided CIDRs, and egress server IP CIDRs are skipped when the same canonical CIDR already exists earlier in the generated list. The renderer MUST NOT emit IPv6 CIDRs such as `::1/128`, `fe80::/10`, `fc00::/7`, or `ff00::/8` in `route_exclude_address`, because Linux `auto_redirect` consumes these exclusions while creating nftables/iproute2 state before user-space IPv6 reject rules can apply.
 
-On Linux service profiles, the NetBird process rule, NetBird domain rules, and direct CIDR rule MUST use sing-box `action = "bypass"` with `outbound = "direct"`. This relies on sing-box 1.13 auto-redirect pre-match bypass support so matching NetBird traffic is excluded at the kernel redirection layer; for non-auto-redirect contexts, the configured outbound keeps the behavior equivalent to direct routing. macOS service and mobile profiles MUST keep `action = "route"` for the same rules.
+On Linux service profiles, the NetBird process rule, NetBird direct-domain rules, and direct CIDR rule MUST use sing-box `action = "bypass"` with `outbound = "direct"`. This relies on sing-box 1.13 auto-redirect pre-match bypass support so matching NetBird traffic is excluded at the kernel redirection layer; for non-auto-redirect contexts, the configured outbound keeps the behavior equivalent to direct routing. macOS service and mobile profiles MUST keep `action = "route"` for the same rules. Mobile profiles cannot process-match NetBird-owned API traffic, so `api.netbird.io` follows the shared proxy exact-domain rule there.
 
 The NetBird exact domains are exactly:
 
 ```text
-api.netbird.io
 signal.netbird.io
 stun.netbird.io
 turn.netbird.io
@@ -2264,6 +2266,7 @@ turn.netbird.io
 The NetBird proxy exact domains are exactly:
 
 ```text
+api.netbird.io
 app.netbird.io
 pkgs.netbird.io
 ```
@@ -2347,13 +2350,12 @@ Every Linux service config is equivalent to this shape after substitution and pr
     ],
     "rules": [
       {
-        "domain": ["app.netbird.io", "pkgs.netbird.io"],
+        "domain": ["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"],
         "action": "route",
         "server": "remote-dns"
       },
       {
         "domain": [
-          "api.netbird.io",
           "signal.netbird.io",
           "stun.netbird.io",
           "turn.netbird.io"
@@ -2456,13 +2458,12 @@ Every Linux service config is equivalent to this shape after substitution and pr
       { "port": 53, "action": "hijack-dns" },
       { "action": "sniff" },
       {
-        "domain": ["app.netbird.io", "pkgs.netbird.io"],
+        "domain": ["api.netbird.io", "app.netbird.io", "pkgs.netbird.io"],
         "action": "route",
         "outbound": "proxy"
       },
       {
         "domain": [
-          "api.netbird.io",
           "signal.netbird.io",
           "stun.netbird.io",
           "turn.netbird.io"
@@ -2508,9 +2509,9 @@ Every Linux service config is equivalent to this shape after substitution and pr
 
 Profile insertion rules:
 
-1. For `linux-amd64` and `linux-arm64`, insert `auto_redirect = true` and `strict_route = true` into the TUN inbound after `auto_route`, keep `route_exclude_address` after those fields, insert `auto_detect_interface = true` as the first key in `route`, render `app.netbird.io` and `pkgs.netbird.io` with `action = "route"` and `outbound = "proxy"` before NetBird direct domains, and render the NetBird process/domain/domain-suffix rules plus the direct CIDR rule with `action = "bypass"` and `outbound = "direct"`.
-2. For `macos-amd64` and `macos-arm64`, insert `strict_route = true` into the TUN inbound after `auto_route`, keep `route_exclude_address` after those fields, insert `auto_detect_interface = true` as the first key in `route`, render `app.netbird.io` and `pkgs.netbird.io` with `action = "route"` and `outbound = "proxy"` before NetBird direct domains, and render the NetBird process/domain/domain-suffix rules plus the direct CIDR rule with `action = "route"` and `outbound = "direct"`.
-3. For `ios` and `android`, use mobile profile insertion from section 9.4: do not insert `auto_detect_interface`, `auto_redirect`, `strict_route`, or `process_name` rules. The mobile route rules start with DNS hijack, sniff, `app.netbird.io` and `pkgs.netbird.io` proxy routing, NetBird domain direct rules, direct CIDR route, public IPv6 rejection, CN rule-set direct route, and final `proxy`; NetBird domain rules and the direct CIDR rule use `action = "route"`.
+1. For `linux-amd64` and `linux-arm64`, insert `auto_redirect = true` and `strict_route = true` into the TUN inbound after `auto_route`, keep `route_exclude_address` after those fields, insert `auto_detect_interface = true` as the first key in `route`, render `api.netbird.io`, `app.netbird.io`, and `pkgs.netbird.io` with `action = "route"` and `outbound = "proxy"` before NetBird direct domains, and render the NetBird process/domain/domain-suffix rules plus the direct CIDR rule with `action = "bypass"` and `outbound = "direct"`.
+2. For `macos-amd64` and `macos-arm64`, insert `strict_route = true` into the TUN inbound after `auto_route`, keep `route_exclude_address` after those fields, insert `auto_detect_interface = true` as the first key in `route`, render `api.netbird.io`, `app.netbird.io`, and `pkgs.netbird.io` with `action = "route"` and `outbound = "proxy"` before NetBird direct domains, and render the NetBird process/domain/domain-suffix rules plus the direct CIDR rule with `action = "route"` and `outbound = "direct"`.
+3. For `ios` and `android`, use mobile profile insertion from section 9.4: do not insert `auto_detect_interface`, `auto_redirect`, `strict_route`, or `process_name` rules. The mobile route rules start with DNS hijack, sniff, `api.netbird.io`, `app.netbird.io`, and `pkgs.netbird.io` proxy routing, NetBird domain direct rules, direct CIDR route, public IPv6 rejection, CN rule-set direct route, and final `proxy`; NetBird domain rules and the direct CIDR rule use `action = "route"`.
 4. The sing-box VLESS outbound shape MUST NOT render a `network` key. This is a deliberate sing-box-specific choice and is not equivalent to the mihomo `network: tcp` transport key.
 
 ### 9.6 Health Probe Config Shape
@@ -2778,7 +2779,7 @@ yaoe client --image
 21. State that Android users import the `android remote-profile` URL from `yaoe client` or `yaoe client --mobile` into the official sing-box graphical client as a Remote Profile.
 22. State that Linux and macOS runtime service scripts detect CPU architecture and users pass no architecture parameters.
 23. State that the Linux image script requires `YAOE_IMAGE_ARCH=amd64` or `YAOE_IMAGE_ARCH=arm64` because image architecture is a build input.
-24. State that generated configs implement IPv4 egress semantics: private/local traffic, NetBird overlay traffic, NetBird control/STUN/TURN/relay traffic, configured direct CIDRs, managed-server endpoint IPs, and CN allowlist traffic are direct; remaining public IPv4 traffic uses proxy aggregation.
+24. State that generated configs implement IPv4 egress semantics: private/local traffic, NetBird overlay traffic, NetBird signal/STUN/TURN/relay traffic, configured direct CIDRs, managed-server endpoint IPs, and CN allowlist traffic are direct; remaining public IPv4 traffic uses proxy aggregation, including browser traffic to `api.netbird.io`.
 25. State that Clash Verge Rev users edit no rule files, merge files, script files, or subscription conversion settings.
 26. Run real acceptance validation through nextest commands in section 11.4.
 
